@@ -1,127 +1,345 @@
-import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Location from 'expo-location';
+import { useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Keyboard,
+  Linking,
+  Platform,
+  Pressable,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { API_URL } from '@/api/config';
-import { comprobarSalud, Salud } from '@/api/salud';
+import { canchasCercanas, canchasDeCiudad, type CanchaResumen } from '@/api/canchas';
+import { ErrorApi } from '@/api/cliente';
+import { Mapa, type ControlMapa } from '@/components/mapa/mapa';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { BottomTabInset, Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 import { useSesion } from '@/sesion/sesion-context';
 
-// En React, la pantalla se "dibuja" a partir del estado.
-// Cuando cambia el estado (con setEstado), React vuelve a dibujarla sola.
-type Estado =
-  | { tipo: 'cargando' }
-  | { tipo: 'ok'; salud: Salud }
-  | { tipo: 'error'; mensaje: string };
+/** Si no tenemos tu ubicación, el mapa empieza en el centro de Sevilla. */
+const SEVILLA = { latitud: 37.3891, longitud: -5.9845 };
+/** La API no deja buscar a más de 50 km (CanchaService.RADIO_MAXIMO). */
+const RADIO_MAXIMO = 50_000;
+/** Esperamos a que el mapa esté quieto este tiempo antes de pedir canchas (ver cargarZona). */
+const ESPERA_MS = 400;
 
-// Llama a la API y traduce la respuesta (o el fallo) a un estado de la pantalla.
-async function pedirEstado(): Promise<Estado> {
-  try {
-    const salud = await comprobarSalud();
-    return { tipo: 'ok', salud };
-  } catch (e) {
-    return { tipo: 'error', mensaje: e instanceof Error ? e.message : String(e) };
-  }
-}
+export default function MapaScreen() {
+  const { token, cerrarSesion } = useSesion();
+  const tema = useTheme();
+  const margenes = useSafeAreaInsets(); // espacio de la "isla" del iPhone, la barra de estado...
 
-export default function InicioScreen() {
-  const { usuario } = useSesion();
-  const [estado, setEstado] = useState<Estado>({ tipo: 'cargando' });
+  const mapa = useRef<ControlMapa>(null);
+  const [canchas, setCanchas] = useState<CanchaResumen[]>([]);
+  const [elegidaId, setElegidaId] = useState<number | null>(null);
+  const [miUbicacion, setMiUbicacion] = useState<{ latitud: number; longitud: number } | null>(null);
+  const [busqueda, setBusqueda] = useState('');
+  const [buscando, setBuscando] = useState(false);
+  const [aviso, setAviso] = useState<string | null>(null);
 
-  // useEffect con [] se ejecuta una sola vez, al abrir la pantalla.
-  // El estado ya empieza en "cargando"; cuando llega la respuesta, la guardamos.
+  // useRef guarda un valor entre repintados SIN provocar un repintado al cambiarlo.
+  const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ultimaPeticion = useRef(0);
+
+  // Al abrir la pantalla: pedimos permiso de ubicación y, si nos lo dan, centramos el mapa en ti.
   useEffect(() => {
-    pedirEstado().then(setEstado);
+    let cancelado = false; // por si sales de la pantalla antes de que llegue la ubicación
+    obtenerUbicacion().then((posicion) => {
+      if (cancelado || !posicion) return;
+      setMiUbicacion(posicion);
+      mapa.current?.mostrarMiUbicacion(posicion.latitud, posicion.longitud);
+      mapa.current?.centrar(posicion.latitud, posicion.longitud, 14);
+    });
+    return () => {
+      cancelado = true;
+      if (temporizador.current) clearTimeout(temporizador.current);
+    };
   }, []);
 
-  // Al pulsar el botón: mostramos "Comprobando…" y volvemos a preguntar.
-  function comprobar() {
-    setEstado({ tipo: 'cargando' });
-    pedirEstado().then(setEstado);
+  function manejarError(e: unknown) {
+    if (e instanceof ErrorApi && e.estado === 401) {
+      cerrarSesion(); // token caducado: vuelta al login
+    } else {
+      setAviso(e instanceof Error ? e.message : 'Algo ha fallado. Inténtalo de nuevo.');
+    }
   }
 
+  /**
+   * El mapa avisa cada vez que se para. No pedimos canchas en cada pequeño movimiento:
+   * esperamos ESPERA_MS y, si se ha vuelto a mover, cancelamos la anterior ("debounce").
+   */
+  function cargarZona(latitud: number, longitud: number, radio: number) {
+    if (temporizador.current) clearTimeout(temporizador.current);
+    temporizador.current = setTimeout(async () => {
+      if (!token) return;
+      // Si llegan dos respuestas desordenadas, nos quedamos solo con la de la última petición.
+      const numero = ++ultimaPeticion.current;
+      try {
+        const lista = await canchasCercanas(token, latitud, longitud, Math.min(radio, RADIO_MAXIMO));
+        if (numero !== ultimaPeticion.current) return;
+        setCanchas(lista);
+        setAviso(null);
+        mapa.current?.mostrarCanchas(lista);
+      } catch (e) {
+        manejarError(e);
+      }
+    }, ESPERA_MS);
+  }
+
+  async function buscarCiudad() {
+    const texto = busqueda.trim();
+    if (!texto || !token) return;
+    Keyboard.dismiss();
+    setBuscando(true);
+    setAviso(null);
+    try {
+      const lista = await canchasDeCiudad(token, texto);
+      if (lista.length === 0) {
+        setAviso(`Todavía no hay canchas en "${texto}"`);
+      } else {
+        // Al moverse, el mapa avisa (onMovido) y se cargan las canchas de esa zona.
+        mapa.current?.encuadrar(lista);
+      }
+    } catch (e) {
+      manejarError(e);
+    } finally {
+      setBuscando(false);
+    }
+  }
+
+  async function irAMiUbicacion() {
+    const posicion = miUbicacion ?? (await obtenerUbicacion());
+    if (!posicion) {
+      setAviso('Activa la ubicación de Pachanga en los ajustes del móvil para ver las canchas cerca de ti.');
+      return;
+    }
+    setMiUbicacion(posicion);
+    mapa.current?.mostrarMiUbicacion(posicion.latitud, posicion.longitud);
+    mapa.current?.centrar(posicion.latitud, posicion.longitud, 15);
+  }
+
+  function elegirCancha(id: number | null) {
+    setElegidaId(id);
+    mapa.current?.elegir(id);
+  }
+
+  const elegida = canchas.find((c) => c.id === elegidaId);
+  const fondoTarjeta = { backgroundColor: tema.background, borderColor: tema.borde };
+
   return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedText type="title" style={styles.titulo}>
-          🏀 Pachanga
-        </ThemedText>
-        <ThemedText style={styles.subtitulo}>
-          ¡Hola, {usuario?.nombre}! Encuentra cancha, encuentra partido
-        </ThemedText>
+    <View style={styles.pantalla}>
+      <Mapa
+        ref={mapa}
+        latitudInicial={SEVILLA.latitud}
+        longitudInicial={SEVILLA.longitud}
+        zoomInicial={12}
+        onMovido={cargarZona}
+        onCanchaPulsada={elegirCancha}
+        onError={setAviso}
+      />
 
-        <ThemedView type="backgroundElement" style={styles.tarjeta}>
-          <ThemedText type="subtitle">Conexión con la API</ThemedText>
-          <ThemedText type="small">{API_URL}</ThemedText>
-
-          {estado.tipo === 'cargando' && <ThemedText>Comprobando…</ThemedText>}
-
-          {estado.tipo === 'ok' && (
-            <>
-              <ThemedText>✅ Conectado</ThemedText>
-              <ThemedText type="small">PostgreSQL {estado.salud.postgresql}</ThemedText>
-              <ThemedText type="small">PostGIS {estado.salud.postgis}</ThemedText>
-            </>
+      {/* Buscador, flotando encima del mapa */}
+      <View style={[styles.arriba, { top: margenes.top + Spacing.two }]} pointerEvents="box-none">
+        <View style={[styles.buscador, fondoTarjeta]}>
+          <TextInput
+            value={busqueda}
+            onChangeText={setBusqueda}
+            onSubmitEditing={buscarCiudad}
+            placeholder="Busca una ciudad"
+            placeholderTextColor={tema.textSecondary}
+            returnKeyType="search"
+            autoCorrect={false}
+            style={[styles.cajaBusqueda, { color: tema.text }]}
+          />
+          {buscando ? (
+            <ActivityIndicator color={tema.primario} />
+          ) : (
+            <Pressable onPress={buscarCiudad} hitSlop={8} accessibilityLabel="Buscar">
+              <ThemedText style={{ color: tema.primario }}>Buscar</ThemedText>
+            </Pressable>
           )}
+        </View>
 
-          {estado.tipo === 'error' && (
-            <>
-              <ThemedText>❌ No se pudo conectar</ThemedText>
-              <ThemedText type="small">{estado.mensaje}</ThemedText>
-              <ThemedText type="small">
-                ¿Está arrancado el backend? ¿El móvil y el PC están en la misma WiFi?
-              </ThemedText>
-            </>
-          )}
+        {aviso ? (
+          <View style={[styles.etiqueta, fondoTarjeta]}>
+            <ThemedText type="small" style={{ color: tema.error }}>
+              {aviso}
+            </ThemedText>
+          </View>
+        ) : (
+          <View style={[styles.etiqueta, fondoTarjeta]}>
+            <ThemedText type="small" themeColor="textSecondary">
+              {canchas.length === 1 ? '1 cancha en esta zona' : `${canchas.length} canchas en esta zona`}
+            </ThemedText>
+          </View>
+        )}
+      </View>
 
-          <Pressable onPress={comprobar} style={styles.boton}>
-            <ThemedText style={styles.textoBoton}>Volver a comprobar</ThemedText>
-          </Pressable>
-        </ThemedView>
-      </SafeAreaView>
-    </ThemedView>
+      {/* Parte de abajo: botón de "mi ubicación" y la cancha elegida */}
+      <View
+        style={[styles.abajo, { bottom: margenes.bottom + BottomTabInset + Spacing.two }]}
+        pointerEvents="box-none">
+        <Pressable
+          onPress={irAMiUbicacion}
+          accessibilityLabel="Ir a mi ubicación"
+          style={({ pressed }) => [styles.botonUbicacion, fondoTarjeta, pressed && styles.pulsado]}>
+          <ThemedText>📍</ThemedText>
+        </Pressable>
+
+        {elegida ? (
+          <ThemedView style={[styles.tarjeta, fondoTarjeta]}>
+            <ThemedText type="subtitle" style={styles.nombre} numberOfLines={2}>
+              {elegida.nombre}
+            </ThemedText>
+            <ThemedText themeColor="textSecondary">
+              {elegida.direccion ? `${elegida.direccion}, ${elegida.ciudad}` : elegida.ciudad}
+            </ThemedText>
+            <View style={styles.acciones}>
+              <Pressable
+                onPress={() => abrirIndicaciones(elegida)}
+                style={({ pressed }) => [
+                  styles.botonTarjeta,
+                  { backgroundColor: tema.primario },
+                  pressed && styles.pulsado,
+                ]}>
+                <ThemedText style={styles.textoBlanco}>Cómo llegar</ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={() => elegirCancha(null)}
+                style={({ pressed }) => [
+                  styles.botonTarjeta,
+                  { borderWidth: 1, borderColor: tema.borde },
+                  pressed && styles.pulsado,
+                ]}>
+                <ThemedText>Cerrar</ThemedText>
+              </Pressable>
+            </View>
+          </ThemedView>
+        ) : null}
+      </View>
+    </View>
   );
 }
 
+/** Pide permiso y devuelve tu posición, o null si no hay permiso o no se puede obtener. */
+async function obtenerUbicacion(): Promise<{ latitud: number; longitud: number } | null> {
+  try {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') return null;
+    // La última posición conocida es instantánea; si no hay, pedimos una nueva (tarda un poco más).
+    const posicion =
+      (await Location.getLastKnownPositionAsync()) ??
+      (await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }));
+    return { latitud: posicion.coords.latitude, longitud: posicion.coords.longitude };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Abre la app de mapas del móvil con la ruta hasta la cancha.
+ * iPhone → Apple Maps; Android → Google Maps (la app, no su SDK: no cuesta nada).
+ */
+function abrirIndicaciones(cancha: CanchaResumen) {
+  const destino = `${cancha.latitud},${cancha.longitud}`;
+  const url =
+    Platform.OS === 'ios'
+      ? `https://maps.apple.com/?daddr=${destino}`
+      : `https://www.google.com/maps/dir/?api=1&destination=${destino}`;
+  Linking.openURL(url);
+}
+
 const styles = StyleSheet.create({
-  container: {
+  pantalla: {
     flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'center',
   },
-  safeArea: {
-    flex: 1,
-    justifyContent: 'center',
+  arriba: {
+    position: 'absolute',
+    left: Spacing.three,
+    right: Spacing.three,
+    gap: Spacing.two,
     alignItems: 'center',
-    gap: Spacing.three,
-    paddingHorizontal: Spacing.four,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
   },
-  titulo: {
-    textAlign: 'center',
+  buscador: {
+    alignSelf: 'stretch',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    paddingHorizontal: Spacing.three,
+    borderRadius: Spacing.four,
+    borderWidth: 1,
+    ...sombra(),
   },
-  subtitulo: {
-    textAlign: 'center',
-    marginBottom: Spacing.four,
+  cajaBusqueda: {
+    flex: 1,
+    paddingVertical: Spacing.three,
+    fontSize: 16,
+  },
+  etiqueta: {
+    paddingVertical: Spacing.one,
+    paddingHorizontal: Spacing.three,
+    borderRadius: Spacing.three,
+    borderWidth: 1,
+    ...sombra(),
+  },
+  abajo: {
+    position: 'absolute',
+    left: Spacing.three,
+    right: Spacing.three,
+    gap: Spacing.two,
+  },
+  botonUbicacion: {
+    alignSelf: 'flex-end',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...sombra(),
   },
   tarjeta: {
-    alignSelf: 'stretch',
-    gap: Spacing.two,
-    padding: Spacing.four,
+    padding: Spacing.three,
     borderRadius: Spacing.four,
+    borderWidth: 1,
+    gap: Spacing.one,
+    ...sombra(),
   },
-  boton: {
+  nombre: {
+    fontSize: 22,
+    lineHeight: 28,
+  },
+  acciones: {
+    flexDirection: 'row',
+    gap: Spacing.two,
     marginTop: Spacing.two,
+  },
+  botonTarjeta: {
+    flex: 1,
+    alignItems: 'center',
     paddingVertical: Spacing.two,
     borderRadius: Spacing.three,
-    backgroundColor: '#E8772E',
-    alignItems: 'center',
   },
-  textoBoton: {
+  textoBlanco: {
     color: '#ffffff',
     fontWeight: '600',
   },
+  pulsado: {
+    opacity: 0.7,
+  },
 });
+
+/** Sombra suave para que lo que flota se distinga del mapa. */
+function sombra() {
+  return {
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4, // Android
+  };
+}

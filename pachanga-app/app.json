@@ -33,7 +33,13 @@
           "imageWidth": 76
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Pachanga usa tu ubicación para enseñarte las canchas que tienes cerca."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

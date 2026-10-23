@@ -19,7 +19,8 @@ App móvil para encontrar canchas de baloncesto en España y organizar pachangas
 - [x] Base de datos, backend y app conectados y probados en un móvil real.
 - [x] Diseño de la base de datos y modelo de datos ([ver diseño](docs/base-de-datos.md)).
 - [x] Registro e inicio de sesión (con token JWT y contraseñas cifradas).
-- [ ] Mapa y canchas.
+- [x] Mapa con las canchas cercanas, tu ubicación y búsqueda por ciudad.
+- [ ] Crear canchas y ficha de cancha.
 - [ ] Eventos e inscripciones.
 - [ ] Notificaciones y moderación.
 
@@ -28,7 +29,7 @@ App móvil para encontrar canchas de baloncesto en España y organizar pachangas
 | Parte | Tecnología |
 |---|---|
 | App móvil | React Native + Expo, TypeScript, Expo Router |
-| Mapas | MapLibre + OpenStreetMap |
+| Mapas | MapLibre GL JS + OpenFreeMap (datos de OpenStreetMap) |
 | Backend (API REST) | Java 21, Spring Boot, Spring Data JPA |
 | Base de datos | PostgreSQL + PostGIS (consultas por distancia) |
 | Entorno local | Docker |

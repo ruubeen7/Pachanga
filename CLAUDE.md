@@ -14,7 +14,7 @@ Propuesta (Google Doc): https://docs.google.com/document/d/1OZGATrf0cciCzewEIOLx
 
 ## Estructura
 - `pachanga-api/`: backend. Java 21, Spring Boot 4, Spring Data JPA, PostgreSQL + PostGIS. Más adelante Spring Security con JWT e hibernate-spatial.
-- `pachanga-app/`: app móvil. React Native + Expo + TypeScript. Mapas con MapLibre + OpenStreetMap.
+- `pachanga-app/`: app móvil. React Native + Expo + TypeScript. Mapas con MapLibre GL JS dentro de un WebView + OpenFreeMap (datos de OpenStreetMap).
 - `docker-compose.yml`: PostgreSQL 17 + PostGIS en local, **puerto 5433** (el 5432 lo ocupa un PostgreSQL de Odoo instalado en Windows; no tocarlo).
 
 ## Reglas del proyecto
@@ -46,3 +46,10 @@ Propuesta (Google Doc): https://docs.google.com/document/d/1OZGATrf0cciCzewEIOLx
 - Capas: `controller` → `servicio` → `repositorio`; entrada/salida JSON con records en `dto` (nunca devolver entidades).
 - App: `src/api/cliente.ts` (`peticion<T>()` y `ErrorApi`), sesión en `src/sesion/` (Context + expo-secure-store). `app/_layout.tsx` usa `Stack.Protected`: con sesión se ve `(tabs)`, sin sesión `login` y `registro`.
 - Si `tsc` se queja de rutas nuevas (`"/ruta" is not assignable...`), es que `.expo/types/router.d.ts` está desactualizado: se regenera al hacer `npx expo start`.
+
+## Mapa de canchas
+- API: `GET /api/canchas/cercanas?lat&lng&radio` (radio en metros, por defecto 10 km, máximo 50 km) y `GET /api/canchas?ciudad=` (sin mayúsculas ni tildes, con la extensión `unaccent` de V2). Devuelven `CanchaResumen`.
+- Perfil `dev` por defecto (`spring.profiles.active=${PERFIL:dev}`): `config/DatosDePrueba` mete 10 canchas de ejemplo si la tabla está vacía. En producción, `PERFIL=prod`.
+- Los tests usan `@ActiveProfiles("test")` y datos en un punto inventado del Atlántico (30, -30) para no chocar con lo que haya en la BD.
+- App: el mapa es MapLibre GL JS dentro de un `react-native-webview` (`src/components/mapa/`), porque MapLibre nativo no está en Expo Go y compilar para iPhone exige cuenta de Apple de pago. Estilo de OpenFreeMap (gratis, sin clave). La app habla con la página con `injectJavaScript` (`window.pachanga.*`) y la página responde con `postMessage` (`listo`, `movido`, `cancha`, `error`).
+- La pantalla (`app/(tabs)/index.tsx`) pide canchas cada vez que el mapa se para (con espera de 400 ms). "Cómo llegar" abre Apple Maps (iOS) o Google Maps (Android) por URL, sin SDK.
