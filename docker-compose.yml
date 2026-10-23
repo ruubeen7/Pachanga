@@ -1,0 +1,19 @@
+# Base de datos local para desarrollo: PostgreSQL 17 con la extensión PostGIS.
+# Arrancar:  docker compose up -d     Parar:  docker compose down
+services:
+  db:
+    image: postgis/postgis:17-3.5
+    container_name: pachanga-db
+    environment:
+      POSTGRES_DB: pachanga
+      POSTGRES_USER: pachanga
+      POSTGRES_PASSWORD: pachanga_dev   # solo para desarrollo en local
+    ports:
+      # 5433 en tu PC (el 5432 ya lo usa el PostgreSQL de Odoo instalado en Windows)
+      - "5433:5432"
+    volumes:
+      - pachanga-db-data:/var/lib/postgresql/data   # los datos sobreviven al apagar el contenedor
+    restart: unless-stopped
+
+volumes:
+  pachanga-db-data:

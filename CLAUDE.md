@@ -1,0 +1,34 @@
+# Pachanga (TFG 2º DAM)
+
+App móvil para encontrar canchas de baloncesto en España y organizar pachangas y entrenamientos.
+Autor: Rubén Fernández Castillo. Entrega: mediados de abril de 2027 (mayo de colchón).
+Propuesta (Google Doc): https://docs.google.com/document/d/1OZGATrf0cciCzewEIOLxGtIglwV6LVDvWbsPH2xYKdY/edit
+
+## Funcionalidad (primera versión)
+- Registro e inicio de sesión.
+- Mapa con canchas cercanas y búsqueda por ciudad.
+- Crear cancha con fotos y ubicación. Antes de crearla se buscan canchas a menos de ~50 m y se pregunta "¿es esta?" para evitar duplicados.
+- Ficha de cancha: fotos, eventos próximos, botón "Cómo llegar" (abre Google Maps / Apple Maps con las coordenadas).
+- Eventos: pachanga o entreno, fecha, hora inicio y fin, plazas, nivel. Apuntarse y desapuntarse.
+- Perfil con mis eventos. Denunciar contenido y bloquear usuarios. Notificaciones push.
+
+## Estructura
+- `pachanga-api/`: backend. Java 21, Spring Boot 4, Spring Data JPA, PostgreSQL + PostGIS. Más adelante Spring Security con JWT e hibernate-spatial.
+- `pachanga-app/`: app móvil. React Native + Expo + TypeScript. Mapas con MapLibre + OpenStreetMap.
+- `docker-compose.yml`: PostgreSQL 17 + PostGIS en local, **puerto 5433** (el 5432 lo ocupa un PostgreSQL de Odoo instalado en Windows; no tocarlo).
+
+## Reglas del proyecto
+- **Coste 0 €** durante el TFG y sin tarjeta en ningún servicio. Nada de Google Maps SDK, Google Play ni hosting de pago.
+  Servicios previstos: Supabase gratis (BD + fotos), Render gratis (backend), EAS Build gratis (APK), Expo Push.
+- Toda la lógica de negocio va en el backend; la app solo muestra datos y envía acciones (así el plan B, Android nativo en Java, solo rehace la app).
+- Rubén domina Java y MySQL; es nuevo en TypeScript, React y Spring Boot. Explicar cada pieza nueva con palabras sencillas y en español.
+- Textos de la app, comentarios y mensajes en español.
+
+## Notas
+- Expo SDK 58 con Expo Router (pantallas en `pachanga-app/src/app/`). Leer `pachanga-app/AGENTS.md` antes de tocar APIs de Expo.
+- `npx expo lint` sale limpio. `npx tsc --noEmit` da 1 error en `app-tabs.web.tsx`: viene de la plantilla de Expo y solo afecta a la versión web, que no usamos.
+
+## Cómo arrancar en local
+1. Base de datos: `docker compose up -d` (en la raíz).
+2. Backend: abrir `pachanga-api` en IntelliJ y ejecutar `PachangaApiApplication`, o `mvnw.cmd spring-boot:run`. Prueba: http://localhost:8080/api/salud
+3. App: en `pachanga-app`, `npx expo start` y escanear el QR con Expo Go (móvil y PC en la misma WiFi).
