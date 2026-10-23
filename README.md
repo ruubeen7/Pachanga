@@ -17,7 +17,7 @@ App móvil para encontrar canchas de baloncesto en España y organizar pachangas
 ## Estado actual
 
 - [x] Base de datos, backend y app conectados y probados en un móvil real.
-- [ ] Diseño de la base de datos y modelo de datos.
+- [x] Diseño de la base de datos y modelo de datos ([ver diseño](docs/base-de-datos.md)).
 - [ ] Registro e inicio de sesión.
 - [ ] Mapa y canchas.
 - [ ] Eventos e inscripciones.

@@ -32,3 +32,10 @@ Propuesta (Google Doc): https://docs.google.com/document/d/1OZGATrf0cciCzewEIOLx
 1. Base de datos: `docker compose up -d` (en la raíz).
 2. Backend: abrir `pachanga-api` en IntelliJ y ejecutar `PachangaApiApplication`, o `mvnw.cmd spring-boot:run`. Prueba: http://localhost:8080/api/salud
 3. App: en `pachanga-app`, `npx expo start` y escanear el QR con Expo Go (móvil y PC en la misma WiFi).
+
+## Base de datos
+- Esquema con Flyway: `pachanga-api/src/main/resources/db/migration/V1__esquema_inicial.sql`. **Nunca editar un script ya aplicado**; cada cambio va en un `V2__...`, `V3__...` nuevo. Hibernate está en `ddl-auto=validate`.
+- Entidades en `com.pachanga.api.modelo`, repositorios en `com.pachanga.api.repositorio`. Ids `BIGINT IDENTITY`, fechas `Instant`/`timestamptz` (UTC), enums como texto con `CHECK`.
+- Ubicación de canchas: `geography(Point,4326)` con JTS `Point` (longitud, latitud). Búsqueda por distancia en `CanchaRepository.buscarCercanas`.
+- Diseño y diagrama E-R: `docs/base-de-datos.md`.
+- Los esquemas `tiger` y `topology` de la BD local vienen de la imagen de PostGIS; ignorarlos.
