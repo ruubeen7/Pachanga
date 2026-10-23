@@ -5,8 +5,10 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -32,6 +34,19 @@ public class ManejadorErrores {
         e.getBindingResult().getFieldErrors()
                 .forEach(error -> campos.putIfAbsent(error.getField(), error.getDefaultMessage()));
         return ResponseEntity.badRequest().body(new ErrorRespuesta("Revisa los datos del formulario", campos));
+    }
+
+    /**
+     * Falta un parámetro de la URL (?lat=...) o no tiene el tipo esperado (?lat=hola).
+     * Sin esto, Spring respondería con su propio formato de error y la app no sabría leerlo.
+     */
+    @ExceptionHandler({MissingServletRequestParameterException.class, MethodArgumentTypeMismatchException.class})
+    public ResponseEntity<ErrorRespuesta> parametroNoValido(Exception e) {
+        String parametro = e instanceof MissingServletRequestParameterException falta
+                ? falta.getParameterName()
+                : ((MethodArgumentTypeMismatchException) e).getName();
+        return ResponseEntity.badRequest()
+                .body(new ErrorRespuesta("Falta el dato '" + parametro + "' o no es válido", Map.of()));
     }
 
     /** La base de datos ha rechazado algo por una restricción UNIQUE (dos peticiones casi a la vez). */

@@ -31,7 +31,16 @@ public interface CanchaRepository extends JpaRepository<Cancha, Long> {
                                 @Param("metros") double metros,
                                 @Param("limite") int limite);
 
-    /** Búsqueda por ciudad sin distinguir mayúsculas ("sevilla" encuentra "Sevilla"). */
-    @Query("SELECT c FROM Cancha c WHERE lower(c.ciudad) = lower(:ciudad) ORDER BY c.nombre")
+    /**
+     * Búsqueda por ciudad sin distinguir mayúsculas ni tildes:
+     * "sevilla" encuentra "Sevilla" y "malaga" encuentra "Málaga".
+     * unaccent() es una extensión de PostgreSQL (se activa en V2__busqueda_sin_tildes.sql).
+     */
+    @Query(value = """
+            SELECT *
+            FROM cancha c
+            WHERE unaccent(lower(c.ciudad)) = unaccent(lower(:ciudad))
+            ORDER BY c.nombre
+            """, nativeQuery = true)
     List<Cancha> buscarPorCiudad(@Param("ciudad") String ciudad);
 }
