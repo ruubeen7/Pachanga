@@ -14,6 +14,10 @@ export const Colors = {
     backgroundElement: '#F0F0F3',
     backgroundSelected: '#E0E1E6',
     textSecondary: '#60646C',
+    // Colores de Pachanga
+    primario: '#E8772E', // naranja balón
+    error: '#D93025',
+    borde: '#D0D1D6',
   },
   dark: {
     text: '#ffffff',
@@ -21,6 +25,9 @@ export const Colors = {
     backgroundElement: '#212225',
     backgroundSelected: '#2E3135',
     textSecondary: '#B0B4BA',
+    primario: '#E8772E',
+    error: '#FF6B5E',
+    borde: '#3A3D42',
   },
 } as const;
 

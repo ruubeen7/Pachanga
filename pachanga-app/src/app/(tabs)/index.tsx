@@ -7,6 +7,7 @@ import { comprobarSalud, Salud } from '@/api/salud';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { useSesion } from '@/sesion/sesion-context';
 
 // En React, la pantalla se "dibuja" a partir del estado.
 // Cuando cambia el estado (con setEstado), React vuelve a dibujarla sola.
@@ -26,6 +27,7 @@ async function pedirEstado(): Promise<Estado> {
 }
 
 export default function InicioScreen() {
+  const { usuario } = useSesion();
   const [estado, setEstado] = useState<Estado>({ tipo: 'cargando' });
 
   // useEffect con [] se ejecuta una sola vez, al abrir la pantalla.
@@ -46,7 +48,9 @@ export default function InicioScreen() {
         <ThemedText type="title" style={styles.titulo}>
           🏀 Pachanga
         </ThemedText>
-        <ThemedText style={styles.subtitulo}>Encuentra cancha, encuentra partido</ThemedText>
+        <ThemedText style={styles.subtitulo}>
+          ¡Hola, {usuario?.nombre}! Encuentra cancha, encuentra partido
+        </ThemedText>
 
         <ThemedView type="backgroundElement" style={styles.tarjeta}>
           <ThemedText type="subtitle">Conexión con la API</ThemedText>

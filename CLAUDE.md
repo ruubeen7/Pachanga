@@ -39,3 +39,10 @@ Propuesta (Google Doc): https://docs.google.com/document/d/1OZGATrf0cciCzewEIOLx
 - Ubicación de canchas: `geography(Point,4326)` con JTS `Point` (longitud, latitud). Búsqueda por distancia en `CanchaRepository.buscarCercanas`.
 - Diseño y diagrama E-R: `docs/base-de-datos.md`.
 - Los esquemas `tiger` y `topology` de la BD local vienen de la imagen de PostGIS; ignorarlos.
+
+## Sesión (registro y login)
+- Backend: Spring Security + `spring-boot-starter-oauth2-resource-server` (JWT HS256 firmado con `pachanga.jwt.secreto`; en producción variable `JWT_SECRETO`). Config en `config/SeguridadConfig`. Rutas públicas: `/api/salud`, `/api/auth/**`; el resto pide `Authorization: Bearer <token>`. El `sub` del token es el id del usuario (`@AuthenticationPrincipal Jwt`).
+- Errores de la API siempre como `{ mensaje, campos }` (`error/ManejadorErrores`). Lanzar `ExcepcionApi(HttpStatus, mensaje)` para errores esperados.
+- Capas: `controller` → `servicio` → `repositorio`; entrada/salida JSON con records en `dto` (nunca devolver entidades).
+- App: `src/api/cliente.ts` (`peticion<T>()` y `ErrorApi`), sesión en `src/sesion/` (Context + expo-secure-store). `app/_layout.tsx` usa `Stack.Protected`: con sesión se ve `(tabs)`, sin sesión `login` y `registro`.
+- Si `tsc` se queja de rutas nuevas (`"/ruta" is not assignable...`), es que `.expo/types/router.d.ts` está desactualizado: se regenera al hacer `npx expo start`.

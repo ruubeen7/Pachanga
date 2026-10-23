@@ -1,18 +1,52 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useColorScheme } from 'react-native';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
+import { SesionProvider, useSesion } from '@/sesion/sesion-context';
 
 SplashScreen.preventAutoHideAsync();
 
-export default function TabLayout() {
+/**
+ * Layout raíz: envuelve toda la app.
+ * SesionProvider va arriba del todo para que cualquier pantalla pueda usar useSesion().
+ */
+export default function RootLayout() {
   const colorScheme = useColorScheme();
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
+      <SesionProvider>
+        <AnimatedSplashOverlay />
+        <Navegacion />
+      </SesionProvider>
     </ThemeProvider>
+  );
+}
+
+/**
+ * Decide qué pantallas se pueden ver según haya sesión o no.
+ * Stack.Protected: si "guard" es false, esas pantallas no existen y Expo Router
+ * lleva al usuario a la primera que sí pueda ver. Por eso, al iniciar sesión pasa solo
+ * a las pestañas, y al cerrar sesión vuelve solo al login.
+ */
+function Navegacion() {
+  const { estado } = useSesion();
+
+  // Mientras se lee la sesión guardada no pintamos nada (se sigue viendo la pantalla de carga).
+  if (estado.tipo === 'cargando') return null;
+
+  const conSesion = estado.tipo === 'con-sesion';
+
+  return (
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Protected guard={conSesion}>
+        <Stack.Screen name="(tabs)" />
+      </Stack.Protected>
+
+      <Stack.Protected guard={!conSesion}>
+        <Stack.Screen name="login" />
+        <Stack.Screen name="registro" />
+      </Stack.Protected>
+    </Stack>
   );
 }
