@@ -1,4 +1,17 @@
 import { peticion } from './cliente';
+import { API_URL } from './config';
+
+/** Tipo de suelo (Superficie.java). */
+export type Superficie = 'CEMENTO' | 'ASFALTO' | 'PARQUET' | 'SINTETICO' | 'OTRA';
+
+/** Textos para enseñar cada superficie en pantalla. */
+export const NOMBRES_SUPERFICIE: Record<Superficie, string> = {
+  CEMENTO: 'Cemento',
+  ASFALTO: 'Asfalto',
+  PARQUET: 'Parquet',
+  SINTETICO: 'Sintético',
+  OTRA: 'Otra',
+};
 
 /** Lo que devuelve la API de cada cancha en el mapa (CanchaResumen.java). */
 export type CanchaResumen = {
@@ -8,7 +21,55 @@ export type CanchaResumen = {
   direccion: string | null;
   latitud: number;
   longitud: number;
-  distanciaMetros: number | null; // solo en la búsqueda "cercanas"
+  distanciaMetros: number | null; // solo en las búsquedas por distancia
+};
+
+export type FotoCancha = { id: number; url: string };
+
+/** Un evento en la ficha de la cancha (EventoResumen.java). Las fechas llegan como texto ISO en UTC. */
+export type EventoResumen = {
+  id: number;
+  tipo: 'PACHANGA' | 'ENTRENO';
+  titulo: string;
+  inicio: string;
+  fin: string;
+  plazas: number;
+  inscritos: number;
+  nivel: 'TODOS' | 'INICIACION' | 'MEDIO' | 'AVANZADO';
+};
+
+/** La ficha completa (CanchaDetalle.java). */
+export type CanchaDetalle = {
+  id: number;
+  nombre: string;
+  descripcion: string | null;
+  direccion: string | null;
+  ciudad: string;
+  latitud: number;
+  longitud: number;
+  superficie: Superficie | null;
+  numCanastas: number | null;
+  cubierta: boolean;
+  iluminacion: boolean;
+  gratuita: boolean;
+  creadaPor: string | null;
+  fotos: FotoCancha[];
+  proximosEventos: EventoResumen[];
+};
+
+/** Lo que se manda para crear una cancha (CrearCanchaPeticion.java). */
+export type NuevaCancha = {
+  nombre: string;
+  ciudad: string;
+  latitud: number;
+  longitud: number;
+  direccion?: string;
+  descripcion?: string;
+  superficie?: Superficie | null;
+  numCanastas?: number | null;
+  cubierta: boolean;
+  iluminacion: boolean;
+  gratuita: boolean;
 };
 
 /** Canchas a menos de `radio` metros de un punto, la más cercana primero. */
@@ -26,4 +87,42 @@ export function canchasCercanas(token: string, latitud: number, longitud: number
 export function canchasDeCiudad(token: string, ciudad: string) {
   const parametros = new URLSearchParams({ ciudad });
   return peticion<CanchaResumen[]>(`/api/canchas?${parametros}`, { token });
+}
+
+/** Canchas que ya existen a menos de 50 m (para preguntar "¿es esta?" antes de crear otra). */
+export function posiblesDuplicados(token: string, latitud: number, longitud: number) {
+  const parametros = new URLSearchParams({ lat: String(latitud), lng: String(longitud) });
+  return peticion<CanchaResumen[]>(`/api/canchas/posibles-duplicados?${parametros}`, { token });
+}
+
+export function obtenerCancha(token: string, id: number) {
+  return peticion<CanchaDetalle>(`/api/canchas/${id}`, { token });
+}
+
+export function crearCancha(token: string, datos: NuevaCancha) {
+  return peticion<CanchaDetalle>('/api/canchas', { metodo: 'POST', cuerpo: datos, token });
+}
+
+/**
+ * Sube una foto (un archivo del móvil, ya reducida) a una cancha.
+ * Va como formulario con archivo ("multipart"), en el campo "foto" que espera la API.
+ */
+export function subirFoto(token: string, canchaId: number, uriArchivo: string) {
+  const formulario = new FormData();
+  // En React Native, un archivo se añade indicando su uri, nombre y tipo.
+  // TypeScript espera un Blob (como en la web), por eso la conversión de tipo.
+  formulario.append('foto', { uri: uriArchivo, name: 'foto.jpg', type: 'image/jpeg' } as unknown as Blob);
+  return peticion<FotoCancha>(`/api/canchas/${canchaId}/fotos`, {
+    metodo: 'POST',
+    cuerpo: formulario,
+    token,
+  });
+}
+
+/**
+ * Las fotos guardadas en local vienen como "/fotos/abc.jpg" (relativas a la API);
+ * las de Supabase vendrán ya con "https://...". Esto devuelve siempre una URL completa.
+ */
+export function urlDeFoto(url: string) {
+  return url.startsWith('/') ? `${API_URL}${url}` : url;
 }

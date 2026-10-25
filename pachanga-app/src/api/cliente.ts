@@ -19,7 +19,7 @@ export class ErrorApi extends Error {
 
 type Opciones = {
   metodo?: 'GET' | 'POST' | 'PUT' | 'DELETE';
-  cuerpo?: unknown; // se envía como JSON
+  cuerpo?: unknown; // se envía como JSON, salvo si es un FormData (archivos), que va tal cual
   token?: string | null; // si hay sesión, se manda en la cabecera Authorization
 };
 
@@ -33,8 +33,11 @@ type Opciones = {
 export async function peticion<T>(ruta: string, opciones: Opciones = {}): Promise<T> {
   const { metodo = 'GET', cuerpo, token } = opciones;
 
+  // Con un FormData no ponemos Content-Type: fetch lo pone solo ("multipart/form-data; boundary=...").
+  const esFormulario = cuerpo instanceof FormData;
+
   const cabeceras: Record<string, string> = { Accept: 'application/json' };
-  if (cuerpo !== undefined) cabeceras['Content-Type'] = 'application/json';
+  if (cuerpo !== undefined && !esFormulario) cabeceras['Content-Type'] = 'application/json';
   if (token) cabeceras.Authorization = `Bearer ${token}`;
 
   let respuesta: Response;
@@ -42,7 +45,7 @@ export async function peticion<T>(ruta: string, opciones: Opciones = {}): Promis
     respuesta = await fetch(`${API_URL}${ruta}`, {
       method: metodo,
       headers: cabeceras,
-      body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo),
+      body: cuerpo === undefined ? undefined : esFormulario ? cuerpo : JSON.stringify(cuerpo),
     });
   } catch {
     throw new ErrorApi(0, 'No se pudo conectar con el servidor. Revisa tu conexión.');

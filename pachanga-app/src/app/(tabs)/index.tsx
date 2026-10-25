@@ -1,10 +1,9 @@
 import * as Location from 'expo-location';
-import { useEffect, useRef, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Keyboard,
-  Linking,
-  Platform,
   Pressable,
   StyleSheet,
   TextInput,
@@ -20,6 +19,7 @@ import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useSesion } from '@/sesion/sesion-context';
+import { abrirIndicaciones } from '@/utils/indicaciones';
 
 /** Si no tenemos tu ubicación, el mapa empieza en el centro de Sevilla. */
 const SEVILLA = { latitud: 37.3891, longitud: -5.9845 };
@@ -43,6 +43,17 @@ export default function MapaScreen() {
 
   // useRef guarda un valor entre repintados SIN provocar un repintado al cambiarlo.
   const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Última zona que ha enseñado el mapa (centro y radio). */
+  const zona = useRef<{ latitud: number; longitud: number; radio: number } | null>(null);
+
+  // useFocusEffect se ejecuta cada vez que esta pantalla vuelve a verse (por ejemplo,
+  // al volver de crear una cancha): recargamos la zona para que salga la nueva.
+  useFocusEffect(
+    useCallback(() => {
+      if (zona.current) cargarZona(zona.current.latitud, zona.current.longitud, zona.current.radio);
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- solo queremos que se ejecute al volver
+    }, []),
+  );
   const ultimaPeticion = useRef(0);
 
   // Al abrir la pantalla: pedimos permiso de ubicación y, si nos lo dan, centramos el mapa en ti.
@@ -73,6 +84,7 @@ export default function MapaScreen() {
    * esperamos ESPERA_MS y, si se ha vuelto a mover, cancelamos la anterior ("debounce").
    */
   function cargarZona(latitud: number, longitud: number, radio: number) {
+    zona.current = { latitud, longitud, radio };
     if (temporizador.current) clearTimeout(temporizador.current);
     temporizador.current = setTimeout(async () => {
       if (!token) return;
@@ -120,6 +132,15 @@ export default function MapaScreen() {
     setMiUbicacion(posicion);
     mapa.current?.mostrarMiUbicacion(posicion.latitud, posicion.longitud);
     mapa.current?.centrar(posicion.latitud, posicion.longitud, 15);
+  }
+
+  /** Abre la pantalla de crear cancha, empezando donde está ahora el centro del mapa. */
+  function anadirCancha() {
+    const centro = zona.current ?? SEVILLA;
+    router.push({
+      pathname: '/cancha/nueva',
+      params: { lat: String(centro.latitud), lng: String(centro.longitud) },
+    });
   }
 
   function elegirCancha(id: number | null) {
@@ -183,15 +204,35 @@ export default function MapaScreen() {
       <View
         style={[styles.abajo, { bottom: margenes.bottom + BottomTabInset + Spacing.two }]}
         pointerEvents="box-none">
-        <Pressable
-          onPress={irAMiUbicacion}
-          accessibilityLabel="Ir a mi ubicación"
-          style={({ pressed }) => [styles.botonUbicacion, fondoTarjeta, pressed && styles.pulsado]}>
-          <ThemedText>📍</ThemedText>
-        </Pressable>
+        <View style={styles.filaBotones} pointerEvents="box-none">
+          {/* Crear una cancha nueva: la pantalla empieza en el centro actual del mapa */}
+          <Pressable
+            onPress={anadirCancha}
+            accessibilityLabel="Añadir una cancha"
+            style={({ pressed }) => [
+              styles.botonAnadir,
+              { backgroundColor: tema.primario },
+              pressed && styles.pulsado,
+            ]}>
+            <ThemedText style={styles.textoBlanco}>+ Añadir cancha</ThemedText>
+          </Pressable>
+          <Pressable
+            onPress={irAMiUbicacion}
+            accessibilityLabel="Ir a mi ubicación"
+            style={({ pressed }) => [styles.botonUbicacion, fondoTarjeta, pressed && styles.pulsado]}>
+            <ThemedText>📍</ThemedText>
+          </Pressable>
+        </View>
 
         {elegida ? (
           <ThemedView style={[styles.tarjeta, fondoTarjeta]}>
+            <Pressable
+              onPress={() => elegirCancha(null)}
+              hitSlop={12}
+              accessibilityLabel="Cerrar"
+              style={styles.cerrar}>
+              <ThemedText themeColor="textSecondary">✕</ThemedText>
+            </Pressable>
             <ThemedText type="subtitle" style={styles.nombre} numberOfLines={2}>
               {elegida.nombre}
             </ThemedText>
@@ -200,22 +241,22 @@ export default function MapaScreen() {
             </ThemedText>
             <View style={styles.acciones}>
               <Pressable
-                onPress={() => abrirIndicaciones(elegida)}
+                onPress={() => router.push(`/cancha/${elegida.id}`)}
                 style={({ pressed }) => [
                   styles.botonTarjeta,
                   { backgroundColor: tema.primario },
                   pressed && styles.pulsado,
                 ]}>
-                <ThemedText style={styles.textoBlanco}>Cómo llegar</ThemedText>
+                <ThemedText style={styles.textoBlanco}>Ver ficha</ThemedText>
               </Pressable>
               <Pressable
-                onPress={() => elegirCancha(null)}
+                onPress={() => abrirIndicaciones(elegida.latitud, elegida.longitud)}
                 style={({ pressed }) => [
                   styles.botonTarjeta,
                   { borderWidth: 1, borderColor: tema.borde },
                   pressed && styles.pulsado,
                 ]}>
-                <ThemedText>Cerrar</ThemedText>
+                <ThemedText>Cómo llegar</ThemedText>
               </Pressable>
             </View>
           </ThemedView>
@@ -238,19 +279,6 @@ async function obtenerUbicacion(): Promise<{ latitud: number; longitud: number }
   } catch {
     return null;
   }
-}
-
-/**
- * Abre la app de mapas del móvil con la ruta hasta la cancha.
- * iPhone → Apple Maps; Android → Google Maps (la app, no su SDK: no cuesta nada).
- */
-function abrirIndicaciones(cancha: CanchaResumen) {
-  const destino = `${cancha.latitud},${cancha.longitud}`;
-  const url =
-    Platform.OS === 'ios'
-      ? `https://maps.apple.com/?daddr=${destino}`
-      : `https://www.google.com/maps/dir/?api=1&destination=${destino}`;
-  Linking.openURL(url);
 }
 
 const styles = StyleSheet.create({
@@ -292,8 +320,25 @@ const styles = StyleSheet.create({
     right: Spacing.three,
     gap: Spacing.two,
   },
+  filaBotones: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  botonAnadir: {
+    height: 48,
+    paddingHorizontal: Spacing.three,
+    borderRadius: 24,
+    justifyContent: 'center',
+    ...sombra(),
+  },
+  cerrar: {
+    position: 'absolute',
+    top: Spacing.two,
+    right: Spacing.three,
+    zIndex: 1,
+  },
   botonUbicacion: {
-    alignSelf: 'flex-end',
     width: 48,
     height: 48,
     borderRadius: 24,

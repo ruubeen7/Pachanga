@@ -41,6 +41,20 @@ function Navegacion() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Protected guard={conSesion}>
         <Stack.Screen name="(tabs)" />
+        {/* Pantallas que se abren encima de las pestañas, con barra arriba y botón de volver */}
+        <Stack.Screen
+          name="cancha/[id]"
+          options={{ headerShown: true, title: 'Cancha', headerBackTitle: 'Atrás', headerTintColor: '#E8772E' }}
+        />
+        <Stack.Screen
+          name="cancha/nueva"
+          options={{
+            headerShown: true,
+            title: 'Nueva cancha',
+            headerBackTitle: 'Atrás',
+            headerTintColor: '#E8772E',
+          }}
+        />
       </Stack.Protected>
 
       <Stack.Protected guard={!conSesion}>

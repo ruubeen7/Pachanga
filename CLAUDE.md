@@ -53,3 +53,8 @@ Propuesta (Google Doc): https://docs.google.com/document/d/1OZGATrf0cciCzewEIOLx
 - Los tests usan `@ActiveProfiles("test")` y datos en un punto inventado del Atlántico (30, -30) para no chocar con lo que haya en la BD.
 - App: el mapa es MapLibre GL JS dentro de un `react-native-webview` (`src/components/mapa/`), porque MapLibre nativo no está en Expo Go y compilar para iPhone exige cuenta de Apple de pago. Estilo de OpenFreeMap (gratis, sin clave). La app habla con la página con `injectJavaScript` (`window.pachanga.*`) y la página responde con `postMessage` (`listo`, `movido`, `cancha`, `error`).
 - La pantalla (`app/(tabs)/index.tsx`) pide canchas cada vez que el mapa se para (con espera de 400 ms). "Cómo llegar" abre Apple Maps (iOS) o Google Maps (Android) por URL, sin SDK.
+
+## Crear canchas, ficha y fotos
+- API: `POST /api/canchas` (`CrearCanchaPeticion`, 201 con `CanchaDetalle`), `GET /api/canchas/{id}` (ficha con fotos y próximos eventos), `GET /api/canchas/posibles-duplicados?lat&lng` (a menos de `CanchaService.RADIO_DUPLICADO` = 50 m) y `POST /api/canchas/{id}/fotos` (multipart, campo `foto`, máximo 10 por cancha).
+- Fotos: interfaz `servicio/AlmacenFotos`; ahora `AlmacenFotosLocal` guarda en `pachanga-api/fotos-subidas/` (en .gitignore) y `config/WebConfig` las sirve en `GET /fotos/**` (público). Al publicar, otra implementación con Supabase Storage. El tipo se comprueba por los primeros bytes (JPG, PNG, WebP), no por el nombre.
+- App: `app/cancha/[id].tsx` (ficha) y `app/cancha/nueva.tsx` (pasos: ubicación con 📍 fijo en el centro → "¿es alguna de estas?" → formulario). Las fotos se eligen y se reducen a 1600 px en `utils/fotos.ts` (expo-image-picker + expo-image-manipulator). `urlDeFoto()` completa las URL relativas con la de la API.
