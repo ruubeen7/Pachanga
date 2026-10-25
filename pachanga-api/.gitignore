@@ -31,3 +31,6 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# Fotos subidas en local por la API
+fotos-subidas/

@@ -4,11 +4,14 @@ import com.pachanga.api.dto.ErrorRespuesta;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -47,6 +50,26 @@ public class ManejadorErrores {
                 : ((MethodArgumentTypeMismatchException) e).getName();
         return ResponseEntity.badRequest()
                 .body(new ErrorRespuesta("Falta el dato '" + parametro + "' o no es válido", Map.of()));
+    }
+
+    /** El JSON no se puede leer (mal formado, o un valor que no existe como superficie "MADERA"). */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorRespuesta> jsonNoValido(HttpMessageNotReadableException e) {
+        return ResponseEntity.badRequest()
+                .body(new ErrorRespuesta("Los datos enviados no tienen el formato correcto", Map.of()));
+    }
+
+    /** Se esperaba un archivo (la foto) y no ha llegado. */
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ResponseEntity<ErrorRespuesta> faltaArchivo(MissingServletRequestPartException e) {
+        return ResponseEntity.badRequest().body(new ErrorRespuesta("No ha llegado ninguna foto", Map.of()));
+    }
+
+    /** El archivo supera spring.servlet.multipart.max-file-size (application.properties). */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorRespuesta> archivoGrande(MaxUploadSizeExceededException e) {
+        return ResponseEntity.status(HttpStatus.CONTENT_TOO_LARGE)
+                .body(new ErrorRespuesta("La foto es demasiado grande (máximo 10 MB)", Map.of()));
     }
 
     /** La base de datos ha rechazado algo por una restricción UNIQUE (dos peticiones casi a la vez). */

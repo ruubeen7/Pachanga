@@ -4,6 +4,7 @@ import com.nimbusds.jose.jwk.source.ImmutableSecret;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -44,6 +45,9 @@ public class SeguridadConfig {
                 .sessionManagement(sesion -> sesion.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(rutas -> rutas
                         .requestMatchers("/api/salud", "/api/auth/**", "/error").permitAll()
+                        // Las fotos se pueden ver sin token (como cualquier imagen de una web);
+                        // subirlas sí lo necesita (POST /api/canchas/{id}/fotos).
+                        .requestMatchers(HttpMethod.GET, "/fotos/**").permitAll()
                         .anyRequest().authenticated())
                 // Activa la comprobación del token JWT en la cabecera Authorization.
                 .oauth2ResourceServer(oauth -> oauth.jwt(Customizer.withDefaults()));

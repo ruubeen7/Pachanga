@@ -9,4 +9,7 @@ public interface FotoCanchaRepository extends JpaRepository<FotoCancha, Long> {
 
     /** Fotos de una cancha, de la más antigua a la más nueva. */
     List<FotoCancha> findByCanchaIdOrderByCreadoEnAsc(Long canchaId);
+
+    /** Cuántas fotos tiene una cancha (hay un máximo por cancha). */
+    long countByCanchaId(Long canchaId);
 }
