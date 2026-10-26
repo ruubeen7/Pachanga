@@ -55,6 +55,19 @@ function Navegacion() {
             headerTintColor: '#E8772E',
           }}
         />
+        <Stack.Screen
+          name="evento/[id]"
+          options={{ headerShown: true, title: 'Evento', headerBackTitle: 'Atrás', headerTintColor: '#E8772E' }}
+        />
+        <Stack.Screen
+          name="evento/nuevo"
+          options={{
+            headerShown: true,
+            title: 'Organizar',
+            headerBackTitle: 'Atrás',
+            headerTintColor: '#E8772E',
+          }}
+        />
       </Stack.Protected>
 
       <Stack.Protected guard={!conSesion}>

@@ -1,5 +1,6 @@
 import { peticion } from './cliente';
 import { API_URL } from './config';
+import type { EventoResumen } from './eventos';
 
 /** Tipo de suelo (Superficie.java). */
 export type Superficie = 'CEMENTO' | 'ASFALTO' | 'PARQUET' | 'SINTETICO' | 'OTRA';
@@ -25,18 +26,6 @@ export type CanchaResumen = {
 };
 
 export type FotoCancha = { id: number; url: string };
-
-/** Un evento en la ficha de la cancha (EventoResumen.java). Las fechas llegan como texto ISO en UTC. */
-export type EventoResumen = {
-  id: number;
-  tipo: 'PACHANGA' | 'ENTRENO';
-  titulo: string;
-  inicio: string;
-  fin: string;
-  plazas: number;
-  inscritos: number;
-  nivel: 'TODOS' | 'INICIACION' | 'MEDIO' | 'AVANZADO';
-};
 
 /** La ficha completa (CanchaDetalle.java). */
 export type CanchaDetalle = {

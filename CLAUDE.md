@@ -58,3 +58,12 @@ Propuesta (Google Doc): https://docs.google.com/document/d/1OZGATrf0cciCzewEIOLx
 - API: `POST /api/canchas` (`CrearCanchaPeticion`, 201 con `CanchaDetalle`), `GET /api/canchas/{id}` (ficha con fotos y próximos eventos), `GET /api/canchas/posibles-duplicados?lat&lng` (a menos de `CanchaService.RADIO_DUPLICADO` = 50 m) y `POST /api/canchas/{id}/fotos` (multipart, campo `foto`, máximo 10 por cancha).
 - Fotos: interfaz `servicio/AlmacenFotos`; ahora `AlmacenFotosLocal` guarda en `pachanga-api/fotos-subidas/` (en .gitignore) y `config/WebConfig` las sirve en `GET /fotos/**` (público). Al publicar, otra implementación con Supabase Storage. El tipo se comprueba por los primeros bytes (JPG, PNG, WebP), no por el nombre.
 - App: `app/cancha/[id].tsx` (ficha) y `app/cancha/nueva.tsx` (pasos: ubicación con 📍 fijo en el centro → "¿es alguna de estas?" → formulario). Las fotos se eligen y se reducen a 1600 px en `utils/fotos.ts` (expo-image-picker + expo-image-manipulator). `urlDeFoto()` completa las URL relativas con la de la API.
+
+## Eventos e inscripciones
+- API (`controller/EventoController`, reglas en `servicio/EventoService`): `POST /api/eventos` (201), `GET /api/eventos/{id}`, `POST` y `DELETE /api/eventos/{id}/inscripcion` (apuntarse/desapuntarse), `POST /api/eventos/{id}/cancelar` (solo el organizador; se marca `CANCELADO`, no se borra) y `GET /api/eventos/mios` (`proximos` y últimos 20 `pasados`). Las acciones devuelven la ficha (`EventoDetalle`) ya actualizada.
+- Reglas: el organizador se apunta solo al crear (ocupa plaza) y no puede desapuntarse, tiene que cancelar; fin después de inicio, no en el pasado (margen 5 min), máximo 8 h y 90 días de antelación; nada se cambia si está cancelado o ya terminó.
+- Plazas: `EventoRepository.buscarBloqueando` hace `SELECT ... FOR UPDATE` para que dos personas no cojan a la vez la última plaza.
+- De otros usuarios solo se devuelve `UsuarioPublico` (id y nombre), nunca el email.
+- App: `app/evento/nuevo.tsx` (día con chips, hora con −/+ de 30 en 30 min, sin selector nativo), `app/evento/[id].tsx` (ficha; el botón depende de `apuntado`/`organizo`), `components/tarjeta-evento.tsx`, `utils/fechas.ts`. Las fechas viajan en UTC (`toISOString()`) y se enseñan en la hora del móvil. La ficha de cancha y el perfil recargan con `useFocusEffect` al volver.
+- React Compiler no deja llamar a `Date.now()` mientras se dibuja: se guarda con `useState(() => Date.now())`.
+

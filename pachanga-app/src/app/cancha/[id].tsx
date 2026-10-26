@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
-import { Stack, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -10,11 +10,11 @@ import {
   subirFoto,
   urlDeFoto,
   type CanchaDetalle,
-  type EventoResumen,
 } from '@/api/canchas';
 import { ErrorApi } from '@/api/cliente';
 import { Boton } from '@/components/boton';
 import { Chip } from '@/components/chip';
+import { TarjetaEvento } from '@/components/tarjeta-evento';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -32,7 +32,7 @@ const MAX_FOTOS = 10;
  */
 export default function FichaCanchaScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { token, cerrarSesion } = useSesion();
+  const { token, usuario, cerrarSesion } = useSesion();
   const tema = useTheme();
   const margenes = useSafeAreaInsets();
   const { width: anchoPantalla } = useWindowDimensions();
@@ -42,24 +42,27 @@ export default function FichaCanchaScreen() {
   const [subiendo, setSubiendo] = useState(false);
   const [avisoFotos, setAvisoFotos] = useState<string | null>(null);
 
-  // Cargamos la ficha al abrir la pantalla (y si cambiara el id).
+  // Cargamos la ficha cada vez que la pantalla se ve (al abrirla y al volver de un evento,
+  // para que salgan los cambios). useCallback hace que la función solo cambie si cambia id o token.
   // El estado se cambia dentro de .then(), cuando llega la respuesta: así lo recomienda React.
-  useEffect(() => {
-    if (!token) return;
-    let cancelado = false; // si sales de la pantalla antes de que llegue, no tocamos el estado
-    obtenerCancha(token, Number(id))
-      .then((datos) => {
-        if (!cancelado) setCancha(datos);
-      })
-      .catch((e) => {
-        if (cancelado) return;
-        if (e instanceof ErrorApi && e.estado === 401) cerrarSesion();
-        else setError(e instanceof Error ? e.message : 'No se pudo cargar la cancha');
-      });
-    return () => {
-      cancelado = true;
-    };
-  }, [id, token, cerrarSesion]);
+  useFocusEffect(
+    useCallback(() => {
+      if (!token) return;
+      let cancelado = false; // si sales de la pantalla antes de que llegue, no tocamos el estado
+      obtenerCancha(token, Number(id))
+        .then((datos) => {
+          if (!cancelado) setCancha(datos);
+        })
+        .catch((e) => {
+          if (cancelado) return;
+          if (e instanceof ErrorApi && e.estado === 401) cerrarSesion();
+          else setError(e instanceof Error ? e.message : 'No se pudo cargar la cancha');
+        });
+      return () => {
+        cancelado = true;
+      };
+    }, [id, token, cerrarSesion]),
+  );
 
   /** Vuelve a pedir la ficha (botón "Reintentar" y después de subir fotos). */
   async function cargar() {
@@ -175,11 +178,22 @@ export default function FichaCanchaScreen() {
           </ThemedText>
           {cancha.proximosEventos.length === 0 ? (
             <ThemedText themeColor="textSecondary">
-              No hay pachangas ni entrenos programados aquí. Pronto podrás organizar el primero.
+              No hay pachangas ni entrenos programados aquí. ¡Organiza el primero!
             </ThemedText>
           ) : (
-            cancha.proximosEventos.map((evento) => <TarjetaEvento key={evento.id} evento={evento} />)
+            cancha.proximosEventos.map((evento) => (
+              <TarjetaEvento key={evento.id} evento={evento} miId={usuario?.id} />
+            ))
           )}
+          <Boton
+            texto="Organizar pachanga o entreno"
+            onPress={() =>
+              router.push({
+                pathname: '/evento/nuevo',
+                params: { canchaId: String(cancha.id), canchaNombre: cancha.nombre },
+              })
+            }
+          />
 
           {cancha.creadaPor ? (
             <ThemedText type="small" themeColor="textSecondary" style={styles.autor}>
@@ -188,27 +202,6 @@ export default function FichaCanchaScreen() {
           ) : null}
         </View>
       </ScrollView>
-    </ThemedView>
-  );
-}
-
-function TarjetaEvento({ evento }: { evento: EventoResumen }) {
-  const tema = useTheme();
-  const inicio = new Date(evento.inicio);
-  const fin = new Date(evento.fin);
-  // toLocaleDateString formatea la fecha en español y en la hora del móvil: "sáb, 25 oct".
-  const dia = inicio.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' });
-  const hora = (fecha: Date) => fecha.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-
-  return (
-    <ThemedView type="backgroundElement" style={[styles.evento, { borderColor: tema.borde }]}>
-      <ThemedText type="smallBold" style={{ color: tema.primario }}>
-        {evento.tipo === 'PACHANGA' ? '🏀 PACHANGA' : '🏋️ ENTRENO'}
-      </ThemedText>
-      <ThemedText>{evento.titulo}</ThemedText>
-      <ThemedText type="small" themeColor="textSecondary">
-        {dia} · {hora(inicio)} – {hora(fin)} · {evento.inscritos}/{evento.plazas} apuntados
-      </ThemedText>
     </ThemedView>
   );
 }
@@ -249,12 +242,6 @@ const styles = StyleSheet.create({
   seccion: {
     marginTop: Spacing.three,
     letterSpacing: 1,
-  },
-  evento: {
-    padding: Spacing.three,
-    borderRadius: Spacing.three,
-    borderWidth: 1,
-    gap: Spacing.half,
   },
   autor: {
     marginTop: Spacing.three,
