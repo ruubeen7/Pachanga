@@ -24,7 +24,7 @@ App móvil para encontrar canchas de baloncesto en España y organizar pachangas
 - [x] Eventos (pachangas y entrenos): organizarlos, apuntarse, desapuntarse, cancelarlos y "mis eventos" en el perfil.
 - [x] Denunciar contenido y bloquear usuarios.
 - [x] Chat en cada evento para los apuntados.
-- [ ] Notificaciones push.
+- [x] Notificaciones push (nuevo apuntado, evento cancelado, mensajes del chat y recordatorio 1 hora antes).
 
 ## Tecnologías
 

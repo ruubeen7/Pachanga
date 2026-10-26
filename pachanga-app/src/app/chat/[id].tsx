@@ -23,6 +23,7 @@ import { ThemedView } from '@/components/themed-view';
 import { VentanaDenuncia, type Denunciable } from '@/components/ventana-denuncia';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { marcarRutaVisible } from '@/notificaciones/notificaciones';
 import { useSesion } from '@/sesion/sesion-context';
 import { dia, hora } from '@/utils/fechas';
 
@@ -94,9 +95,12 @@ export default function ChatScreen() {
         }
       }
 
+      // Mientras lees este chat, no te avisamos de sus mensajes nuevos (ya los ves).
+      marcarRutaVisible(`/chat/${id}`);
       consultar();
       temporizador = setInterval(consultar, INTERVALO_MS);
       return () => {
+        marcarRutaVisible(null);
         activo = false;
         clearInterval(temporizador);
       };

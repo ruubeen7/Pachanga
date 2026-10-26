@@ -2,6 +2,7 @@ package com.pachanga.api.repositorio;
 
 import com.pachanga.api.modelo.Evento;
 import com.pachanga.api.modelo.Inscripcion;
+import com.pachanga.api.modelo.Usuario;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -24,6 +25,10 @@ public interface InscripcionRepository extends JpaRepository<Inscripcion, Long> 
 
     /** Lista de apuntados a un evento, por orden de llegada. */
     List<Inscripcion> findByEventoIdOrderByCreadoEnAsc(Long eventoId);
+
+    /** Apuntados a un evento que tienen las notificaciones activadas (token guardado). */
+    @Query("select u from Inscripcion i join i.usuario u where i.evento.id = :eventoId and u.pushToken is not null")
+    List<Usuario> apuntadosConAvisos(@Param("eventoId") Long eventoId);
 
     /** Eventos a los que se ha apuntado un usuario. */
     List<Inscripcion> findByUsuarioId(Long usuarioId);

@@ -51,6 +51,9 @@ export function SesionProvider({ children }: { children: ReactNode }) {
     registrarse: async (email, nombre, password) =>
       entrar(await api.registrar({ email, nombre, password })),
     cerrarSesion: async () => {
+      // Avisamos a la API para que este móvil deje de recibir notificaciones de esta cuenta.
+      // Si falla (sin conexión, token caducado...), cerramos sesión igualmente.
+      if (estado.tipo === 'con-sesion') await api.borrarPushToken(estado.sesion.token).catch(() => {});
       await borrarSesion();
       setEstado({ tipo: 'sin-sesion' });
     },

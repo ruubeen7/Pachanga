@@ -48,14 +48,16 @@ public class EventoService {
     private final UsuarioRepository usuarios;
     private final CanchaService canchas;
     private final BloqueoService bloqueos;
+    private final AvisoService avisos;
 
-    public EventoService(EventoRepository eventos, InscripcionRepository inscripciones,
-                         UsuarioRepository usuarios, CanchaService canchas, BloqueoService bloqueos) {
+    public EventoService(EventoRepository eventos, InscripcionRepository inscripciones, UsuarioRepository usuarios,
+                         CanchaService canchas, BloqueoService bloqueos, AvisoService avisos) {
         this.eventos = eventos;
         this.inscripciones = inscripciones;
         this.usuarios = usuarios;
         this.canchas = canchas;
         this.bloqueos = bloqueos;
+        this.avisos = avisos;
     }
 
     /** Organiza un evento. Quien lo crea queda apuntado automáticamente (ocupa una plaza). */
@@ -98,7 +100,9 @@ public class EventoService {
             throw new ExcepcionApi(HttpStatus.CONFLICT, "Ya no quedan plazas");
         }
 
-        inscripciones.save(new Inscripcion(evento, buscarUsuario(usuarioId)));
+        Usuario nuevo = buscarUsuario(usuarioId);
+        inscripciones.save(new Inscripcion(evento, nuevo));
+        avisos.alApuntarse(evento, nuevo, inscripciones.countByEventoId(eventoId));
         return detalle(evento, usuarioId);
     }
 
@@ -131,6 +135,7 @@ public class EventoService {
         comprobarQueSigueEnPie(evento);
 
         evento.setEstado(EstadoEvento.CANCELADO);
+        avisos.alCancelar(evento);
         // No hace falta llamar a save(): la entidad está "gestionada" por JPA dentro de la transacción,
         // y al terminar Hibernate guarda solo los cambios (UPDATE evento SET estado = ...).
         return detalle(evento, usuarioId);

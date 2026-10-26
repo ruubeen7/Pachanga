@@ -1,3 +1,5 @@
+import { File } from 'expo-file-system';
+
 import { peticion } from './cliente';
 import { API_URL } from './config';
 import type { EventoResumen } from './eventos';
@@ -98,9 +100,12 @@ export function crearCancha(token: string, datos: NuevaCancha) {
  */
 export function subirFoto(token: string, canchaId: number, uriArchivo: string) {
   const formulario = new FormData();
-  // En React Native, un archivo se añade indicando su uri, nombre y tipo.
-  // TypeScript espera un Blob (como en la web), por eso la conversión de tipo.
-  formulario.append('foto', { uri: uriArchivo, name: 'foto.jpg', type: 'image/jpeg' } as unknown as Blob);
+  // La ruta tiene que empezar por "file://" para que se encuentre el archivo.
+  const uri = uriArchivo.includes('://') ? uriArchivo : `file://${uriArchivo}`;
+  // Desde el SDK 54, el fetch de Expo solo acepta archivos "de verdad" (que sepan dar sus bytes),
+  // no el antiguo { uri, name, type } de React Native. File de expo-file-system es uno de ellos:
+  // representa el archivo del móvil, y fetch lo lee y lo manda. Su nombre y tipo salen de la ruta (.jpg).
+  formulario.append('foto', new File(uri));
   return peticion<FotoCancha>(`/api/canchas/${canchaId}/fotos`, {
     metodo: 'POST',
     cuerpo: formulario,

@@ -41,6 +41,12 @@
         }
       ],
       [
+        "expo-notifications",
+        {
+          "color": "#E8772E"
+        }
+      ],
+      [
         "expo-image-picker",
         {
           "photosPermission": "Pachanga necesita acceder a tus fotos para que puedas añadir fotos de las canchas.",

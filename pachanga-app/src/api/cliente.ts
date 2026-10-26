@@ -47,7 +47,9 @@ export async function peticion<T>(ruta: string, opciones: Opciones = {}): Promis
       headers: cabeceras,
       body: cuerpo === undefined ? undefined : esFormulario ? cuerpo : JSON.stringify(cuerpo),
     });
-  } catch {
+  } catch (e) {
+    // __DEV__ solo es true mientras desarrollamos: el error de verdad sale en la terminal de Expo.
+    if (__DEV__) console.warn(`Fallo de red en ${metodo} ${ruta}:`, e);
     throw new ErrorApi(0, 'No se pudo conectar con el servidor. Revisa tu conexión.');
   }
 

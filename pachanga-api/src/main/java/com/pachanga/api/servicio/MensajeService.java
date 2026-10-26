@@ -37,14 +37,16 @@ public class MensajeService {
     private final UsuarioRepository usuarios;
     private final EventoService eventos;
     private final BloqueoService bloqueos;
+    private final AvisoService avisos;
 
-    public MensajeService(MensajeRepository mensajes, InscripcionRepository inscripciones,
-                          UsuarioRepository usuarios, EventoService eventos, BloqueoService bloqueos) {
+    public MensajeService(MensajeRepository mensajes, InscripcionRepository inscripciones, UsuarioRepository usuarios,
+                          EventoService eventos, BloqueoService bloqueos, AvisoService avisos) {
         this.mensajes = mensajes;
         this.inscripciones = inscripciones;
         this.usuarios = usuarios;
         this.eventos = eventos;
         this.bloqueos = bloqueos;
+        this.avisos = avisos;
     }
 
     /**
@@ -80,6 +82,7 @@ public class MensajeService {
         Usuario autor = usuarios.findById(usuarioId)
                 .orElseThrow(() -> new ExcepcionApi(HttpStatus.UNAUTHORIZED, "La sesión ya no es válida"));
         Mensaje mensaje = mensajes.save(new Mensaje(evento, autor, texto));
+        avisos.alEscribir(evento, mensaje);
         return MensajeRespuesta.de(mensaje, usuarioId);
     }
 

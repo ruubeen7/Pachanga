@@ -25,6 +25,17 @@ public interface EventoRepository extends JpaRepository<Evento, Long> {
     List<Evento> findByOrganizadorIdOrderByInicioDesc(Long organizadorId);
 
     /**
+     * Eventos activos que empiezan entre ahora y {@code limite} y aún no tienen el recordatorio enviado.
+     * Las comparaciones con enums en JPQL se escriben con el nombre completo de la clase.
+     */
+    @Query("""
+            select e from Evento e join fetch e.cancha
+            where e.estado = com.pachanga.api.modelo.EstadoEvento.ACTIVO
+              and e.recordatorioEnviado = false
+              and e.inicio > :ahora and e.inicio <= :limite""")
+    List<Evento> pendientesDeRecordatorio(@Param("ahora") Instant ahora, @Param("limite") Instant limite);
+
+    /**
      * Busca el evento y BLOQUEA su fila hasta que acabe la transacción (SELECT ... FOR UPDATE).
      * Lo usamos al apuntarse: si dos personas pulsan "Apuntarme" a la vez por la última plaza,
      * la segunda espera a que termine la primera y entonces ya ve que no quedan plazas.

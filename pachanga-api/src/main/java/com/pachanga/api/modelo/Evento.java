@@ -56,6 +56,10 @@ public class Evento extends EntidadBase {
     @Column(nullable = false, length = 20)
     private EstadoEvento estado = EstadoEvento.ACTIVO;
 
+    /** Si ya se ha avisado a los apuntados de que empieza en menos de una hora (columna de V4). */
+    @Column(name = "recordatorio_enviado", nullable = false)
+    private boolean recordatorioEnviado = false;
+
     protected Evento() {
     }
 
@@ -140,5 +144,13 @@ public class Evento extends EntidadBase {
 
     public void setEstado(EstadoEvento estado) {
         this.estado = estado;
+    }
+
+    public boolean isRecordatorioEnviado() {
+        return recordatorioEnviado;
+    }
+
+    public void setRecordatorioEnviado(boolean recordatorioEnviado) {
+        this.recordatorioEnviado = recordatorioEnviado;
     }
 }
