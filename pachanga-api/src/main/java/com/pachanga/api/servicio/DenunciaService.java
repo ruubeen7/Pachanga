@@ -9,6 +9,7 @@ import com.pachanga.api.repositorio.CanchaRepository;
 import com.pachanga.api.repositorio.DenunciaRepository;
 import com.pachanga.api.repositorio.EventoRepository;
 import com.pachanga.api.repositorio.FotoCanchaRepository;
+import com.pachanga.api.repositorio.MensajeRepository;
 import com.pachanga.api.repositorio.UsuarioRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -26,14 +27,16 @@ public class DenunciaService {
     private final CanchaRepository canchas;
     private final FotoCanchaRepository fotos;
     private final EventoRepository eventos;
+    private final MensajeRepository mensajes;
 
     public DenunciaService(DenunciaRepository denuncias, UsuarioRepository usuarios, CanchaRepository canchas,
-                           FotoCanchaRepository fotos, EventoRepository eventos) {
+                           FotoCanchaRepository fotos, EventoRepository eventos, MensajeRepository mensajes) {
         this.denuncias = denuncias;
         this.usuarios = usuarios;
         this.canchas = canchas;
         this.fotos = fotos;
         this.eventos = eventos;
+        this.mensajes = mensajes;
     }
 
     @Transactional
@@ -67,6 +70,7 @@ public class DenunciaService {
             case FOTO -> fotos.existsById(id);
             case EVENTO -> eventos.existsById(id);
             case USUARIO -> usuarios.existsById(id);
+            case MENSAJE -> mensajes.existsById(id);
         };
     }
 }

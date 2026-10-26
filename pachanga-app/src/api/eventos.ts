@@ -94,3 +94,26 @@ export function misEventos(token: string) {
   return peticion<MisEventos>('/api/eventos/mios', { token });
 }
 
+// ---------------------------------------------------------------- chat
+
+/** Un mensaje del chat (MensajeRespuesta.java). mio = lo he escrito yo. */
+export type Mensaje = {
+  id: number;
+  texto: string;
+  creadoEn: string;
+  autor: UsuarioPublico;
+  mio: boolean;
+};
+
+/**
+ * Mensajes del chat de un evento. Sin despuesDe: los últimos 100.
+ * Con despuesDe: solo los que llegaron después de ese mensaje (para las consultas periódicas).
+ */
+export function leerMensajes(token: string, eventoId: number, despuesDe?: number | null) {
+  const consulta = despuesDe != null ? `?despuesDe=${despuesDe}` : '';
+  return peticion<Mensaje[]>(`/api/eventos/${eventoId}/mensajes${consulta}`, { token });
+}
+
+export function enviarMensaje(token: string, eventoId: number, texto: string) {
+  return peticion<Mensaje>(`/api/eventos/${eventoId}/mensajes`, { metodo: 'POST', cuerpo: { texto }, token });
+}

@@ -68,6 +68,10 @@ function Navegacion() {
             headerTintColor: '#E8772E',
           }}
         />
+        <Stack.Screen
+          name="chat/[id]"
+          options={{ headerShown: true, title: 'Chat', headerBackTitle: 'Atrás', headerTintColor: '#E8772E' }}
+        />
       </Stack.Protected>
 
       <Stack.Protected guard={!conSesion}>

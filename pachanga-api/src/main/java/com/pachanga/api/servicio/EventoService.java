@@ -171,7 +171,7 @@ public class EventoService {
      * Como buscarEvento, pero si hay un bloqueo con el organizador responde igual que si no existiera.
      * Así quien ha sido bloqueado no puede ni ver ni apuntarse a los eventos de quien le bloqueó.
      */
-    private Evento buscarEventoVisible(Long id, Long usuarioId) {
+    Evento buscarEventoVisible(Long id, Long usuarioId) {
         Evento evento = buscarEvento(id);
         if (bloqueos.hayBloqueoEntre(usuarioId, evento.getOrganizador().getId())) {
             throw new ExcepcionApi(HttpStatus.NOT_FOUND, "Ese evento no existe");

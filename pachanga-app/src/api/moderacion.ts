@@ -2,7 +2,7 @@ import { peticion } from './cliente';
 import type { UsuarioPublico } from './eventos';
 
 /** Qué se denuncia (TipoContenido.java). */
-export type TipoContenido = 'CANCHA' | 'FOTO' | 'EVENTO' | 'USUARIO';
+export type TipoContenido = 'CANCHA' | 'FOTO' | 'EVENTO' | 'USUARIO' | 'MENSAJE';
 export type MotivoDenuncia = 'SPAM' | 'INAPROPIADO' | 'FALSO' | 'OTRO';
 
 export const NOMBRES_MOTIVO: Record<MotivoDenuncia, string> = {

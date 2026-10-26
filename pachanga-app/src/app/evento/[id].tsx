@@ -246,6 +246,17 @@ export default function FichaEventoScreen() {
             </ThemedText>
           ) : null}
 
+          {/* El chat solo es para los apuntados (la API también lo comprueba). */}
+          {evento.apuntado && (
+            <Boton
+              texto="💬 Chat del evento"
+              variante="secundario"
+              onPress={() =>
+                router.push({ pathname: '/chat/[id]', params: { id: String(evento.id), titulo: evento.titulo } })
+              }
+            />
+          )}
+
           {!cancelado && !terminado && (
             <Boton
               texto="Cómo llegar"
