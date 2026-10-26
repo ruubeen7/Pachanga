@@ -12,10 +12,14 @@ import {
   NOMBRES_TIPO,
   obtenerEvento,
   type EventoDetalle,
+  type UsuarioPublico,
 } from '@/api/eventos';
+import { bloquear } from '@/api/moderacion';
 import { Boton } from '@/components/boton';
+import { BotonMenu, MenuOpciones, type Opcion } from '@/components/menu-opciones';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { VentanaDenuncia, type Denunciable } from '@/components/ventana-denuncia';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useSesion } from '@/sesion/sesion-context';
@@ -40,6 +44,9 @@ export default function FichaEventoScreen() {
   // La hora a la que se abrió la pantalla, para saber si el evento ya terminó
   // (React no deja leer el reloj mientras dibuja).
   const [abiertaEn] = useState(() => Date.now());
+  // Menú "⋯" abierto (con su título y opciones) y lo que se está denunciando.
+  const [menu, setMenu] = useState<{ titulo?: string; opciones: Opcion[] } | null>(null);
+  const [denuncia, setDenuncia] = useState<Denunciable>(null);
 
   useEffect(() => {
     if (!token) return;
@@ -100,6 +107,66 @@ export default function FichaEventoScreen() {
     ]);
   }
 
+  /** Pregunta antes de bloquear y, si dice que sí, bloquea. */
+  function confirmarBloqueo(persona: UsuarioPublico) {
+    Alert.alert(
+      `¿Bloquear a ${persona.nombre}?`,
+      'No veréis los eventos ni las fotos del otro, y saldréis de los eventos que organice el otro. ' +
+        'Puedes desbloquearle desde tu perfil.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Bloquear',
+          style: 'destructive',
+          onPress: async () => {
+            if (!token || !evento) return;
+            try {
+              await bloquear(token, persona.id);
+              // Si has bloqueado a quien organiza, ya no puedes ver este evento: volvemos atrás.
+              if (persona.id === evento.organizador.id) router.back();
+              else await cargar();
+            } catch (e) {
+              setAviso(e instanceof Error ? e.message : 'No se pudo bloquear');
+            }
+          },
+        },
+      ],
+    );
+  }
+
+  /** Menú de la barra de arriba: denunciar el evento o bloquear a quien lo organiza. */
+  function abrirMenuEvento() {
+    if (!evento) return;
+    const opciones: Opcion[] = [
+      {
+        texto: 'Denunciar evento',
+        onPress: () => setDenuncia({ tipo: 'EVENTO', id: evento.id, nombre: evento.titulo }),
+      },
+    ];
+    if (!evento.organizo) {
+      opciones.push({
+        texto: `Bloquear a ${evento.organizador.nombre}`,
+        peligro: true,
+        onPress: () => confirmarBloqueo(evento.organizador),
+      });
+    }
+    setMenu({ opciones });
+  }
+
+  /** Al tocar a alguien de la lista "Quién va". */
+  function abrirMenuPersona(persona: UsuarioPublico) {
+    setMenu({
+      titulo: persona.nombre,
+      opciones: [
+        {
+          texto: `Denunciar a ${persona.nombre}`,
+          onPress: () => setDenuncia({ tipo: 'USUARIO', id: persona.id, nombre: persona.nombre }),
+        },
+        { texto: `Bloquear a ${persona.nombre}`, peligro: true, onPress: () => confirmarBloqueo(persona) },
+      ],
+    });
+  }
+
   if (error) {
     return (
       <ThemedView style={styles.centro}>
@@ -123,11 +190,14 @@ export default function FichaEventoScreen() {
   const fin = new Date(evento.fin);
   const cancelado = evento.estado === 'CANCELADO';
   const terminado = fin.getTime() <= abiertaEn;
-  const libres = evento.plazas - evento.apuntados.length;
+  const libres = evento.plazas - evento.inscritos;
 
   return (
     <ThemedView style={styles.fondo}>
-      <Stack.Screen options={{ title: NOMBRES_TIPO[evento.tipo] }} />
+      {/* headerRight: lo que se pinta a la derecha de la barra de arriba */}
+      <Stack.Screen
+        options={{ title: NOMBRES_TIPO[evento.tipo], headerRight: () => <BotonMenu onPress={abrirMenuEvento} /> }}
+      />
 
       <ScrollView contentContainerStyle={[styles.contenido, { paddingBottom: margenes.bottom + Spacing.four }]}>
         {cancelado && (
@@ -149,7 +219,7 @@ export default function FichaEventoScreen() {
           <Dato icono="📶" texto={NOMBRES_NIVEL[evento.nivel]} />
           <Dato
             icono="👥"
-            texto={`${evento.apuntados.length}/${evento.plazas} apuntados${
+            texto={`${evento.inscritos}/${evento.plazas} apuntados${
               libres > 0 ? ` · quedan ${libres}` : ' · completo'
             }`}
           />
@@ -189,7 +259,11 @@ export default function FichaEventoScreen() {
           QUIÉN VA
         </ThemedText>
         {evento.apuntados.map((persona) => (
-          <View key={persona.id} style={[styles.persona, { borderColor: tema.borde }]}>
+          <Pressable
+            key={persona.id}
+            // Tocar a otra persona abre el menú para denunciarla o bloquearla (a ti mismo no).
+            onPress={persona.id === usuario?.id ? undefined : () => abrirMenuPersona(persona)}
+            style={[styles.persona, { borderColor: tema.borde }]}>
             <View style={[styles.avatar, { backgroundColor: tema.primario }]}>
               <ThemedText style={styles.textoBlanco}>{persona.nombre.charAt(0).toUpperCase()}</ThemedText>
             </View>
@@ -202,9 +276,17 @@ export default function FichaEventoScreen() {
                 Organiza
               </ThemedText>
             )}
-          </View>
+          </Pressable>
         ))}
       </ScrollView>
+
+      <MenuOpciones
+        visible={menu !== null}
+        titulo={menu?.titulo}
+        opciones={menu?.opciones ?? []}
+        onCerrar={() => setMenu(null)}
+      />
+      <VentanaDenuncia contenido={denuncia} onCerrar={() => setDenuncia(null)} />
     </ThemedView>
   );
 }

@@ -14,9 +14,11 @@ import {
 import { ErrorApi } from '@/api/cliente';
 import { Boton } from '@/components/boton';
 import { Chip } from '@/components/chip';
+import { BotonMenu, MenuOpciones, type Opcion } from '@/components/menu-opciones';
 import { TarjetaEvento } from '@/components/tarjeta-evento';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { VentanaDenuncia, type Denunciable } from '@/components/ventana-denuncia';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useSesion } from '@/sesion/sesion-context';
@@ -41,6 +43,9 @@ export default function FichaCanchaScreen() {
   const [error, setError] = useState<string | null>(null);
   const [subiendo, setSubiendo] = useState(false);
   const [avisoFotos, setAvisoFotos] = useState<string | null>(null);
+  const [fotoActual, setFotoActual] = useState(0); // qué foto del carrusel se está viendo
+  const [menu, setMenu] = useState<Opcion[] | null>(null);
+  const [denuncia, setDenuncia] = useState<Denunciable>(null);
 
   // Cargamos la ficha cada vez que la pantalla se ve (al abrirla y al volver de un evento,
   // para que salgan los cambios). useCallback hace que la función solo cambie si cambia id o token.
@@ -92,6 +97,25 @@ export default function FichaCanchaScreen() {
     setSubiendo(false);
   }
 
+  /** Menú "⋯": denunciar la cancha o la foto que se está viendo. */
+  function abrirMenu() {
+    if (!cancha) return;
+    const opciones: Opcion[] = [
+      {
+        texto: 'Denunciar cancha',
+        onPress: () => setDenuncia({ tipo: 'CANCHA', id: cancha.id, nombre: cancha.nombre }),
+      },
+    ];
+    const foto = cancha.fotos[fotoActual];
+    if (foto) {
+      opciones.push({
+        texto: 'Denunciar esta foto',
+        onPress: () => setDenuncia({ tipo: 'FOTO', id: foto.id, nombre: `Foto ${fotoActual + 1} de ${cancha.nombre}` }),
+      });
+    }
+    setMenu(opciones);
+  }
+
   if (error) {
     return (
       <ThemedView style={[styles.centro, { paddingBottom: margenes.bottom }]}>
@@ -116,22 +140,36 @@ export default function FichaCanchaScreen() {
   return (
     <ThemedView style={styles.fondo}>
       {/* Desde la propia pantalla cambiamos el título de la barra de arriba */}
-      <Stack.Screen options={{ title: cancha.nombre }} />
+      <Stack.Screen options={{ title: cancha.nombre, headerRight: () => <BotonMenu onPress={abrirMenu} /> }} />
 
       <ScrollView contentContainerStyle={{ paddingBottom: margenes.bottom + Spacing.four }}>
         {/* Fotos: se pasan deslizando de lado (pagingEnabled hace que se pare en cada una) */}
         {cancha.fotos.length > 0 ? (
-          <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}>
-            {cancha.fotos.map((foto) => (
-              <Image
-                key={foto.id}
-                source={{ uri: urlDeFoto(foto.url) }}
-                style={{ width: anchoPantalla, height: 260 }}
-                contentFit="cover"
-                transition={200}
-              />
-            ))}
-          </ScrollView>
+          <View>
+            <ScrollView
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              // Al terminar de deslizar, calculamos qué foto ha quedado delante.
+              onMomentumScrollEnd={(e) => setFotoActual(Math.round(e.nativeEvent.contentOffset.x / anchoPantalla))}>
+              {cancha.fotos.map((foto) => (
+                <Image
+                  key={foto.id}
+                  source={{ uri: urlDeFoto(foto.url) }}
+                  style={{ width: anchoPantalla, height: 260 }}
+                  contentFit="cover"
+                  transition={200}
+                />
+              ))}
+            </ScrollView>
+            {cancha.fotos.length > 1 && (
+              <View style={styles.contadorFotos}>
+                <ThemedText type="small" style={styles.textoBlanco}>
+                  {fotoActual + 1}/{cancha.fotos.length}
+                </ThemedText>
+              </View>
+            )}
+          </View>
         ) : (
           <ThemedView type="backgroundElement" style={styles.sinFotos}>
             <ThemedText type="title">🏀</ThemedText>
@@ -202,11 +240,26 @@ export default function FichaCanchaScreen() {
           ) : null}
         </View>
       </ScrollView>
+
+      <MenuOpciones visible={menu !== null} opciones={menu ?? []} onCerrar={() => setMenu(null)} />
+      <VentanaDenuncia contenido={denuncia} onCerrar={() => setDenuncia(null)} />
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
+  contadorFotos: {
+    position: 'absolute',
+    right: Spacing.three,
+    bottom: Spacing.three,
+    paddingHorizontal: Spacing.two,
+    paddingVertical: Spacing.half,
+    borderRadius: Spacing.three,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  textoBlanco: {
+    color: '#ffffff',
+  },
   fondo: {
     flex: 1,
   },

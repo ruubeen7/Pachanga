@@ -67,3 +67,10 @@ Propuesta (Google Doc): https://docs.google.com/document/d/1OZGATrf0cciCzewEIOLx
 - App: `app/evento/nuevo.tsx` (día con chips, hora con −/+ de 30 en 30 min, sin selector nativo), `app/evento/[id].tsx` (ficha; el botón depende de `apuntado`/`organizo`), `components/tarjeta-evento.tsx`, `utils/fechas.ts`. Las fechas viajan en UTC (`toISOString()`) y se enseñan en la hora del móvil. La ficha de cancha y el perfil recargan con `useFocusEffect` al volver.
 - React Compiler no deja llamar a `Date.now()` mientras se dibuja: se guarda con `useState(() => Date.now())`.
 
+## Denuncias y bloqueos
+- Denuncias: `POST /api/denuncias` (`CrearDenunciaPeticion`: `tipo` CANCHA/FOTO/EVENTO/USUARIO, `contenidoId`, `motivo`, `comentario`), 201 sin cuerpo. `DenunciaService` comprueba que lo denunciado existe (la tabla no tiene FK), no repetir (409) y no denunciarse a uno mismo. Se guardan como `PENDIENTE`; aún no hay pantalla de administrador para revisarlas.
+- Bloqueos: `GET /api/usuarios/bloqueados`, `POST` y `DELETE /api/usuarios/{id}/bloqueo` (204, se pueden repetir). Funcionan en las dos direcciones (`BloqueoService.ocultosPara`): no se ven fotos, eventos ni "Añadida por" del otro en la ficha de cancha; el evento de un organizador bloqueado responde 404; en "quién va" no sale, pero cuenta en `EventoDetalle.inscritos`. Al bloquear, cada uno sale de los próximos eventos que organiza el otro (`InscripcionRepository.quitarDeEventosDe`).
+- `CanchaService.detalle` y `EventoService.detalle` reciben el id de quien pregunta para aplicar los bloqueos.
+- App: `api/moderacion.ts`, `components/menu-opciones.tsx` (`MenuOpciones` y el botón `BotonMenu` "⋯" de la barra) y `components/ventana-denuncia.tsx`. Ficha de cancha: denunciar cancha o la foto visible. Ficha de evento: denunciar evento, bloquear al organizador, y tocar a alguien en "Quién va" para denunciarle o bloquearle. Perfil: lista de bloqueados para desbloquear.
+- En iPhone no se puede abrir una alerta/Modal mientras otro Modal se cierra: `MenuOpciones` espera a `onDismiss` antes de ejecutar la opción.
+

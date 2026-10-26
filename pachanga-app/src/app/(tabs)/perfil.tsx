@@ -1,10 +1,11 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ErrorApi } from '@/api/cliente';
-import { misEventos, type MisEventos } from '@/api/eventos';
+import { misEventos, type MisEventos, type UsuarioPublico } from '@/api/eventos';
+import { desbloquear, usuariosBloqueados } from '@/api/moderacion';
 import { Boton } from '@/components/boton';
 import { TarjetaEvento } from '@/components/tarjeta-evento';
 import { ThemedText } from '@/components/themed-text';
@@ -19,16 +20,19 @@ export default function PerfilScreen() {
   const [saliendo, setSaliendo] = useState(false);
   const [eventos, setEventos] = useState<MisEventos | null>(null);
   const [errorEventos, setErrorEventos] = useState<string | null>(null);
+  const [bloqueados, setBloqueados] = useState<UsuarioPublico[]>([]);
 
   // Cada vez que entras en la pestaña pedimos tus eventos (por si te has apuntado a alguno).
   useFocusEffect(
     useCallback(() => {
       if (!token) return;
       let cancelado = false;
-      misEventos(token)
-        .then((datos) => {
+      // Promise.all lanza las dos peticiones a la vez y espera a que lleguen ambas.
+      Promise.all([misEventos(token), usuariosBloqueados(token)])
+        .then(([datos, lista]) => {
           if (cancelado) return;
           setEventos(datos);
+          setBloqueados(lista);
           setErrorEventos(null);
         })
         .catch((e) => {
@@ -46,6 +50,24 @@ export default function PerfilScreen() {
   if (!usuario) return null;
 
   const inicial = usuario.nombre.charAt(0).toUpperCase();
+
+  function confirmarDesbloqueo(persona: UsuarioPublico) {
+    Alert.alert(`¿Desbloquear a ${persona.nombre}?`, 'Volveréis a ver los eventos y las fotos del otro.', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Desbloquear',
+        onPress: async () => {
+          if (!token) return;
+          try {
+            await desbloquear(token, persona.id);
+            setBloqueados(bloqueados.filter((b) => b.id !== persona.id));
+          } catch {
+            Alert.alert('No se pudo desbloquear', 'Inténtalo de nuevo.');
+          }
+        },
+      },
+    ]);
+  }
 
   async function salir() {
     setSaliendo(true);
@@ -98,6 +120,24 @@ export default function PerfilScreen() {
             </View>
           )}
 
+          {bloqueados.length > 0 && (
+            <View style={styles.seccion}>
+              <ThemedText type="smallBold" style={styles.tituloSeccion}>
+                USUARIOS BLOQUEADOS
+              </ThemedText>
+              {bloqueados.map((persona) => (
+                <View key={persona.id} style={[styles.bloqueado, { borderColor: tema.borde }]}>
+                  <ThemedText style={styles.nombreBloqueado}>{persona.nombre}</ThemedText>
+                  <Pressable onPress={() => confirmarDesbloqueo(persona)} hitSlop={8}>
+                    <ThemedText type="small" style={{ color: tema.primario }}>
+                      Desbloquear
+                    </ThemedText>
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          )}
+
           <View style={styles.acciones}>
             <Boton texto="Cerrar sesión" variante="secundario" onPress={salir} cargando={saliendo} />
           </View>
@@ -139,6 +179,15 @@ const styles = StyleSheet.create({
   },
   tituloSeccion: {
     letterSpacing: 1,
+  },
+  bloqueado: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: Spacing.two,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  nombreBloqueado: {
+    flex: 1,
   },
   acciones: {
     alignSelf: 'stretch',

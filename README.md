@@ -22,7 +22,8 @@ App móvil para encontrar canchas de baloncesto en España y organizar pachangas
 - [x] Mapa con las canchas cercanas, tu ubicación y búsqueda por ciudad.
 - [x] Crear canchas (con aviso de duplicados a menos de 50 m y fotos) y ficha de cancha.
 - [x] Eventos (pachangas y entrenos): organizarlos, apuntarse, desapuntarse, cancelarlos y "mis eventos" en el perfil.
-- [ ] Notificaciones y moderación.
+- [x] Denunciar contenido y bloquear usuarios.
+- [ ] Notificaciones push.
 
 ## Tecnologías
 

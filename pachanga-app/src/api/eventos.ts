@@ -45,6 +45,8 @@ export type EventoDetalle = {
   inicio: string;
   fin: string;
   plazas: number;
+  /** Total de apuntados. Puede ser mayor que apuntados.length: no salen los usuarios bloqueados. */
+  inscritos: number;
   nivel: NivelEvento;
   estado: EstadoEvento;
   cancha: CanchaResumen;

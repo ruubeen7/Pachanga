@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 
 /** Canchas: búsquedas del mapa, alta de canchas y ficha. */
 @Service
@@ -46,14 +47,16 @@ public class CanchaService {
     private final EventoRepository eventos;
     private final InscripcionRepository inscripciones;
     private final UsuarioRepository usuarios;
+    private final BloqueoService bloqueos;
 
     public CanchaService(CanchaRepository canchas, FotoCanchaRepository fotos, EventoRepository eventos,
-                         InscripcionRepository inscripciones, UsuarioRepository usuarios) {
+                         InscripcionRepository inscripciones, UsuarioRepository usuarios, BloqueoService bloqueos) {
         this.canchas = canchas;
         this.fotos = fotos;
         this.eventos = eventos;
         this.inscripciones = inscripciones;
         this.usuarios = usuarios;
+        this.bloqueos = bloqueos;
     }
 
     /** Canchas a menos de {@code radio} metros del punto, la más cercana primero. */
@@ -100,12 +103,15 @@ public class CanchaService {
         cancha.setIluminacion(Boolean.TRUE.equals(datos.iluminacion()));
         cancha.setGratuita(!Boolean.FALSE.equals(datos.gratuita()));
 
-        return detalle(canchas.save(cancha));
+        return detalle(canchas.save(cancha), usuarioId);
     }
 
-    /** La ficha de una cancha, con sus fotos y sus próximos eventos. 404 si no existe. */
-    public CanchaDetalle detalle(Long id) {
-        return detalle(buscarCancha(id));
+    /**
+     * La ficha de una cancha, con sus fotos y sus próximos eventos, vista por {@code usuarioId}:
+     * no salen las fotos ni los eventos de usuarios con los que hay un bloqueo. 404 si no existe.
+     */
+    public CanchaDetalle detalle(Long id, Long usuarioId) {
+        return detalle(buscarCancha(id), usuarioId);
     }
 
     /** Devuelve la cancha o lanza un 404. Lo usa también FotoService. */
@@ -114,19 +120,24 @@ public class CanchaService {
                 .orElseThrow(() -> new ExcepcionApi(HttpStatus.NOT_FOUND, "Esa cancha no existe"));
     }
 
-    private CanchaDetalle detalle(Cancha cancha) {
+    private CanchaDetalle detalle(Cancha cancha, Long usuarioId) {
+        Set<Long> ocultos = bloqueos.ocultosPara(usuarioId);
+
         List<FotoRespuesta> listaFotos = fotos.findByCanchaIdOrderByCreadoEnAsc(cancha.getId()).stream()
+                .filter(f -> f.getSubidaPor() == null || !ocultos.contains(f.getSubidaPor().getId()))
                 .map(FotoRespuesta::de)
                 .toList();
 
         List<EventoResumen> proximos = eventos
                 .findByCanchaIdAndEstadoAndFinAfterOrderByInicioAsc(cancha.getId(), EstadoEvento.ACTIVO, Instant.now())
                 .stream()
+                .filter(e -> !ocultos.contains(e.getOrganizador().getId()))
                 .map(e -> EventoResumen.de(e, inscripciones.countByEventoId(e.getId())))
                 .toList();
 
         // getCreadaPor() es LAZY: aquí, dentro de la transacción, Hibernate lo carga al pedir el nombre.
-        String autor = cancha.getCreadaPor() == null ? null : cancha.getCreadaPor().getNombre();
+        Usuario creador = cancha.getCreadaPor();
+        String autor = creador == null || ocultos.contains(creador.getId()) ? null : creador.getNombre();
 
         return new CanchaDetalle(cancha.getId(), cancha.getNombre(), cancha.getDescripcion(), cancha.getDireccion(),
                 cancha.getCiudad(), cancha.getLatitud(), cancha.getLongitud(), cancha.getSuperficie(),

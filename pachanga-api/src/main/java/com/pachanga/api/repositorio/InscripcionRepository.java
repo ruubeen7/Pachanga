@@ -4,6 +4,7 @@ import com.pachanga.api.modelo.Evento;
 import com.pachanga.api.modelo.Inscripcion;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -37,6 +38,19 @@ public interface InscripcionRepository extends JpaRepository<Inscripcion, Long> 
             where i.usuario.id = :usuarioId and e.fin > :ahora
             order by e.inicio asc""")
     List<Evento> proximosDe(@Param("usuarioId") Long usuarioId, @Param("ahora") Instant ahora);
+
+    /**
+     * Saca a un usuario de los eventos que organiza otro y aún no han terminado (se usa al bloquear).
+     * @Modifying: avisa a Spring de que esta consulta cambia datos (es un DELETE, no un SELECT).
+     * Devuelve cuántas inscripciones ha borrado.
+     */
+    @Modifying
+    @Query("""
+            delete from Inscripcion i
+            where i.usuario.id = :usuarioId
+              and i.evento.id in (select e.id from Evento e where e.organizador.id = :organizadorId and e.fin > :ahora)""")
+    int quitarDeEventosDe(@Param("usuarioId") Long usuarioId, @Param("organizadorId") Long organizadorId,
+                          @Param("ahora") Instant ahora);
 
     /** Eventos del usuario que ya terminaron, el más reciente primero. Pageable dice cuántos como mucho. */
     @Query("""

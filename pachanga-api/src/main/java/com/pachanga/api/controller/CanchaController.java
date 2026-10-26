@@ -65,8 +65,8 @@ public class CanchaController {
 
     /** GET /api/canchas/5 → ficha de la cancha 5 (con fotos y próximos eventos). */
     @GetMapping("/{id}")
-    public CanchaDetalle detalle(@PathVariable Long id) {
-        return servicio.detalle(id);
+    public CanchaDetalle detalle(@AuthenticationPrincipal Jwt token, @PathVariable Long id) {
+        return servicio.detalle(id, Long.valueOf(token.getSubject()));
     }
 
     /** POST /api/canchas → da de alta una cancha. Responde 201 (Created) con su ficha. */

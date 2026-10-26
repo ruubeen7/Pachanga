@@ -24,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Eventos (pachangas y entrenos): crearlos, verlos, apuntarse, desapuntarse y cancelarlos.
@@ -46,13 +47,15 @@ public class EventoService {
     private final InscripcionRepository inscripciones;
     private final UsuarioRepository usuarios;
     private final CanchaService canchas;
+    private final BloqueoService bloqueos;
 
     public EventoService(EventoRepository eventos, InscripcionRepository inscripciones,
-                         UsuarioRepository usuarios, CanchaService canchas) {
+                         UsuarioRepository usuarios, CanchaService canchas, BloqueoService bloqueos) {
         this.eventos = eventos;
         this.inscripciones = inscripciones;
         this.usuarios = usuarios;
         this.canchas = canchas;
+        this.bloqueos = bloqueos;
     }
 
     /** Organiza un evento. Quien lo crea queda apuntado automáticamente (ocupa una plaza). */
@@ -74,7 +77,7 @@ public class EventoService {
 
     /** La ficha de un evento, vista por el usuario que pregunta. */
     public EventoDetalle detalle(Long eventoId, Long usuarioId) {
-        return detalle(buscarEvento(eventoId), usuarioId);
+        return detalle(buscarEventoVisible(eventoId, usuarioId), usuarioId);
     }
 
     /** Apunta al usuario al evento si quedan plazas. */
@@ -83,6 +86,9 @@ public class EventoService {
         // Bloqueamos el evento para que nadie más se apunte mientras contamos las plazas.
         Evento evento = eventos.buscarBloqueando(eventoId)
                 .orElseThrow(() -> new ExcepcionApi(HttpStatus.NOT_FOUND, "Ese evento no existe"));
+        if (bloqueos.hayBloqueoEntre(usuarioId, evento.getOrganizador().getId())) {
+            throw new ExcepcionApi(HttpStatus.NOT_FOUND, "Ese evento no existe");
+        }
         comprobarQueSigueEnPie(evento);
 
         if (inscripciones.existsByEventoIdAndUsuarioId(eventoId, usuarioId)) {
@@ -146,15 +152,31 @@ public class EventoService {
     // ------------------------------------------------------------------ ayudantes
 
     private EventoDetalle detalle(Evento evento, Long usuarioId) {
-        List<UsuarioPublico> apuntados = inscripciones.findByEventoIdOrderByCreadoEnAsc(evento.getId()).stream()
+        List<UsuarioPublico> todos = inscripciones.findByEventoIdOrderByCreadoEnAsc(evento.getId()).stream()
                 .map(i -> UsuarioPublico.de(i.getUsuario()))
                 .toList();
-        boolean apuntado = apuntados.stream().anyMatch(u -> u.id().equals(usuarioId));
+        boolean apuntado = todos.stream().anyMatch(u -> u.id().equals(usuarioId));
+
+        // En la lista no enseñamos a quien tenga un bloqueo contigo, pero sí cuenta para las plazas.
+        Set<Long> ocultos = bloqueos.ocultosPara(usuarioId);
+        List<UsuarioPublico> visibles = todos.stream().filter(u -> !ocultos.contains(u.id())).toList();
 
         return new EventoDetalle(evento.getId(), evento.getTipo(), evento.getTitulo(), evento.getDescripcion(),
-                evento.getInicio(), evento.getFin(), evento.getPlazas(), evento.getNivel(), evento.getEstado(),
-                CanchaResumen.de(evento.getCancha(), null), UsuarioPublico.de(evento.getOrganizador()),
-                apuntados, apuntado, esOrganizador(evento, usuarioId));
+                evento.getInicio(), evento.getFin(), evento.getPlazas(), todos.size(), evento.getNivel(),
+                evento.getEstado(), CanchaResumen.de(evento.getCancha(), null),
+                UsuarioPublico.de(evento.getOrganizador()), visibles, apuntado, esOrganizador(evento, usuarioId));
+    }
+
+    /**
+     * Como buscarEvento, pero si hay un bloqueo con el organizador responde igual que si no existiera.
+     * Así quien ha sido bloqueado no puede ni ver ni apuntarse a los eventos de quien le bloqueó.
+     */
+    private Evento buscarEventoVisible(Long id, Long usuarioId) {
+        Evento evento = buscarEvento(id);
+        if (bloqueos.hayBloqueoEntre(usuarioId, evento.getOrganizador().getId())) {
+            throw new ExcepcionApi(HttpStatus.NOT_FOUND, "Ese evento no existe");
+        }
+        return evento;
     }
 
     private EventoResumen resumen(Evento evento) {
