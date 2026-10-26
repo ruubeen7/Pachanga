@@ -1,0 +1,31 @@
+# =====================================================================
+# "Blueprint" de Render: describe el servidor de la API para que Render lo cree solo.
+# En Render: New > Blueprint > elegir este repositorio.
+# Las variables con "sync: false" son secretas: Render las pide al crear el servicio
+# y no se guardan en GitHub.
+# =====================================================================
+services:
+  - type: web
+    name: pachanga-api
+    runtime: docker
+    plan: free
+    region: frankfurt          # el más cercano a España
+    rootDir: pachanga-api      # el backend está en esta carpeta del repositorio
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/salud
+    envVars:
+      - key: PERFIL
+        value: prod
+      - key: JWT_SECRETO
+        generateValue: true    # Render inventa una clave larga y aleatoria
+      - key: DB_URL
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_CLAVE_SECRETA
+        sync: false

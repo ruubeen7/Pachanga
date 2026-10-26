@@ -1,6 +1,7 @@
 package com.pachanga.api.servicio;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -15,9 +16,11 @@ import java.util.UUID;
  * WebConfig hace que se puedan ver en http://IP:8080/fotos/nombre.jpg
  *
  * Sirve para desarrollar en local. En Render el disco se borra en cada despliegue,
- * por eso en producción se usará Supabase Storage.
+ * por eso en producción se usa AlmacenFotosSupabase (pachanga.fotos.almacen=supabase).
+ * matchIfMissing = true: si no se dice nada, se usa esta.
  */
 @Component
+@ConditionalOnProperty(name = "pachanga.fotos.almacen", havingValue = "local", matchIfMissing = true)
 public class AlmacenFotosLocal implements AlmacenFotos {
 
     private final Path carpeta;

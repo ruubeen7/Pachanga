@@ -1,0 +1,6 @@
+# Lo que NO se copia al construir la imagen de Docker (no hace falta y la haría más lenta).
+target/
+fotos-subidas/
+.idea/
+*.iml
+HELP.md
