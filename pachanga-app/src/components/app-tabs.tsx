@@ -21,6 +21,12 @@ export default function AppTabs() {
         />
       </NativeTabs.Trigger>
 
+      {/* Canchas cercanas con eventos creados (app/(tabs)/partidos.tsx) */}
+      <NativeTabs.Trigger name="partidos">
+        <NativeTabs.Trigger.Label>Partidos</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="sportscourt" md="sports_basketball" />
+      </NativeTabs.Trigger>
+
       <NativeTabs.Trigger name="perfil">
         <NativeTabs.Trigger.Label>Perfil</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon

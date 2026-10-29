@@ -25,6 +25,8 @@ export type CanchaResumen = {
   latitud: number;
   longitud: number;
   distanciaMetros: number | null; // solo en las búsquedas por distancia
+  eventosProximos: number; // eventos activos que aún no han terminado (el mapa resalta las que tienen)
+  proximoEvento: string | null; // cuándo empieza el primero, en UTC; null si no hay
 };
 
 export type FotoCancha = { id: number; url: string };
@@ -72,6 +74,15 @@ export function canchasCercanas(token: string, latitud: number, longitud: number
     radio: String(Math.round(radio)),
   });
   return peticion<CanchaResumen[]>(`/api/canchas/cercanas?${parametros}`, { token });
+}
+
+/**
+ * Canchas cerca de un punto que tienen eventos próximos, de la más cercana a la más lejana
+ * (pestaña "Partidos"). Sin radio, el servidor busca a 50 km.
+ */
+export function canchasConEventos(token: string, latitud: number, longitud: number) {
+  const parametros = new URLSearchParams({ lat: String(latitud), lng: String(longitud) });
+  return peticion<CanchaResumen[]>(`/api/canchas/con-eventos?${parametros}`, { token });
 }
 
 /** Canchas de una ciudad ("sevilla" encuentra "Sevilla"). */

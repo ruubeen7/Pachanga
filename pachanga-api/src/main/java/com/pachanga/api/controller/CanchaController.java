@@ -42,10 +42,24 @@ public class CanchaController {
      * radio es opcional, en metros.
      */
     @GetMapping("/cercanas")
-    public List<CanchaResumen> cercanas(@RequestParam double lat,
+    public List<CanchaResumen> cercanas(@AuthenticationPrincipal Jwt token,
+                                        @RequestParam double lat,
                                         @RequestParam double lng,
                                         @RequestParam(required = false) Integer radio) {
-        return servicio.cercanas(lat, lng, radio);
+        return servicio.cercanas(lat, lng, radio, Long.valueOf(token.getSubject()));
+    }
+
+    /**
+     * GET /api/canchas/con-eventos?lat=37.38&lng=-5.97&radio=50000
+     * Canchas cercanas que tienen eventos próximos, de la más cercana a la más lejana.
+     * radio es opcional, en metros (por defecto 50 km).
+     */
+    @GetMapping("/con-eventos")
+    public List<CanchaResumen> conEventos(@AuthenticationPrincipal Jwt token,
+                                          @RequestParam double lat,
+                                          @RequestParam double lng,
+                                          @RequestParam(required = false) Integer radio) {
+        return servicio.cercanasConEventos(lat, lng, radio, Long.valueOf(token.getSubject()));
     }
 
     /**
@@ -53,14 +67,15 @@ public class CanchaController {
      * Canchas a menos de 50 m: la app las enseña antes de crear una ("¿es esta?").
      */
     @GetMapping("/posibles-duplicados")
-    public List<CanchaResumen> posiblesDuplicados(@RequestParam double lat, @RequestParam double lng) {
-        return servicio.posiblesDuplicados(lat, lng);
+    public List<CanchaResumen> posiblesDuplicados(@AuthenticationPrincipal Jwt token,
+                                                  @RequestParam double lat, @RequestParam double lng) {
+        return servicio.posiblesDuplicados(lat, lng, Long.valueOf(token.getSubject()));
     }
 
     /** GET /api/canchas?ciudad=Sevilla → canchas de esa ciudad. */
     @GetMapping
-    public List<CanchaResumen> porCiudad(@RequestParam String ciudad) {
-        return servicio.porCiudad(ciudad);
+    public List<CanchaResumen> porCiudad(@AuthenticationPrincipal Jwt token, @RequestParam String ciudad) {
+        return servicio.porCiudad(ciudad, Long.valueOf(token.getSubject()));
     }
 
     /** GET /api/canchas/5 → ficha de la cancha 5 (con fotos y próximos eventos). */

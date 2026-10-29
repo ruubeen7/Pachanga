@@ -32,6 +32,25 @@ public interface CanchaRepository extends JpaRepository<Cancha, Long> {
                                 @Param("limite") int limite);
 
     /**
+     * Como buscarCercanas, pero solo las canchas que tienen algún evento activo que aún no ha terminado.
+     * Es la lista "Canchas con partidos cerca de mí", de la más cercana a la más lejana.
+     * EXISTS es verdadero si la subconsulta devuelve al menos una fila.
+     */
+    @Query(value = """
+            SELECT *
+            FROM cancha c
+            WHERE ST_DWithin(c.ubicacion, ST_SetSRID(ST_MakePoint(:longitud, :latitud), 4326)::geography, :metros)
+              AND EXISTS (SELECT 1 FROM evento e
+                          WHERE e.cancha_id = c.id AND e.estado = 'ACTIVO' AND e.fin > now())
+            ORDER BY ST_Distance(c.ubicacion, ST_SetSRID(ST_MakePoint(:longitud, :latitud), 4326)::geography)
+            LIMIT :limite
+            """, nativeQuery = true)
+    List<Cancha> buscarCercanasConEventos(@Param("latitud") double latitud,
+                                          @Param("longitud") double longitud,
+                                          @Param("metros") double metros,
+                                          @Param("limite") int limite);
+
+    /**
      * Búsqueda por ciudad sin distinguir mayúsculas ni tildes:
      * "sevilla" encuentra "Sevilla" y "malaga" encuentra "Málaga".
      * unaccent() es una extensión de PostgreSQL (se activa en V2__busqueda_sin_tildes.sql).

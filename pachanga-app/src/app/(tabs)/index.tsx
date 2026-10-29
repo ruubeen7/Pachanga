@@ -1,4 +1,3 @@
-import * as Location from 'expo-location';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -20,6 +19,7 @@ import { BottomTabInset, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useSesion } from '@/sesion/sesion-context';
 import { abrirIndicaciones } from '@/utils/indicaciones';
+import { obtenerUbicacion } from '@/utils/ubicacion';
 
 /** Si no tenemos tu ubicación, el mapa empieza en el centro de Sevilla. */
 const SEVILLA = { latitud: 37.3891, longitud: -5.9845 };
@@ -239,6 +239,13 @@ export default function MapaScreen() {
             <ThemedText themeColor="textSecondary">
               {elegida.direccion ? `${elegida.direccion}, ${elegida.ciudad}` : elegida.ciudad}
             </ThemedText>
+            <ThemedText type="smallBold" style={{ color: elegida.eventosProximos > 0 ? tema.primario : tema.textSecondary }}>
+              {elegida.eventosProximos === 0
+                ? 'Sin eventos próximos'
+                : elegida.eventosProximos === 1
+                  ? '🔥 1 evento próximo'
+                  : `🔥 ${elegida.eventosProximos} eventos próximos`}
+            </ThemedText>
             <View style={styles.acciones}>
               <Pressable
                 onPress={() => router.push(`/cancha/${elegida.id}`)}
@@ -264,21 +271,6 @@ export default function MapaScreen() {
       </View>
     </View>
   );
-}
-
-/** Pide permiso y devuelve tu posición, o null si no hay permiso o no se puede obtener. */
-async function obtenerUbicacion(): Promise<{ latitud: number; longitud: number } | null> {
-  try {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') return null;
-    // La última posición conocida es instantánea; si no hay, pedimos una nueva (tarda un poco más).
-    const posicion =
-      (await Location.getLastKnownPositionAsync()) ??
-      (await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }));
-    return { latitud: posicion.coords.latitude, longitud: posicion.coords.longitude };
-  } catch {
-    return null;
-  }
 }
 
 const styles = StyleSheet.create({

@@ -27,13 +27,35 @@ export function crearHtmlMapa(latitud: number, longitud: number, zoom: number): 
   body { background: #e8e4dc; }
   /* Chincheta de cancha. El tamaño se cambia en .dentro porque MapLibre usa "transform" del contenedor para colocarla. */
   .chincheta { cursor: pointer; }
+  /* Cancha sin eventos: pequeña y algo apagada, para que destaquen las que tienen. */
   .chincheta .dentro {
-    width: 30px; height: 30px; border-radius: 50%;
-    background: #E8772E; border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.35);
-    display: flex; align-items: center; justify-content: center; font-size: 17px;
+    position: relative;
+    width: 26px; height: 26px; border-radius: 50%;
+    background: #E8A57A; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.3);
+    display: flex; align-items: center; justify-content: center; font-size: 14px;
     transition: transform .15s;
   }
   .chincheta.elegida .dentro { transform: scale(1.3); background: #B9531A; }
+  /* Cancha con eventos próximos: más grande, color fuerte, con una onda que late y el número de eventos. */
+  .chincheta.con-eventos .dentro {
+    width: 38px; height: 38px; font-size: 21px;
+    background: #E8772E; border-width: 3px; box-shadow: 0 2px 8px rgba(0,0,0,.4);
+  }
+  .chincheta.con-eventos .dentro::before {
+    content: ''; position: absolute; inset: -3px; border-radius: 50%;
+    border: 3px solid #E8772E; animation: latido 1.8s ease-out infinite;
+  }
+  @keyframes latido {
+    from { transform: scale(1); opacity: .8; }
+    to { transform: scale(1.9); opacity: 0; }
+  }
+  .chincheta .numero {
+    display: none; position: absolute; top: -6px; right: -8px;
+    min-width: 18px; height: 18px; padding: 0 4px; box-sizing: border-box; border-radius: 9px;
+    background: #D93025; color: #fff; border: 2px solid #fff;
+    font: bold 11px/14px -apple-system, Roboto, sans-serif; text-align: center;
+  }
+  .chincheta.con-eventos .numero { display: block; }
   /* Punto azul de "estás aquí" */
   .yo { width: 14px; height: 14px; border-radius: 50%; background: #1A73E8;
         border: 3px solid #fff; box-shadow: 0 0 0 6px rgba(26,115,232,.25); }
@@ -67,6 +89,14 @@ export function crearHtmlMapa(latitud: number, longitud: number, zoom: number): 
       var centro = mapa.getCenter();
       var radio = centro.distanceTo(mapa.getBounds().getNorthEast()); // metros del centro a una esquina
       enviar({ tipo: 'movido', lat: centro.lat, lng: centro.lng, radio: Math.round(radio) });
+    }
+
+    // Resalta la chincheta si la cancha tiene eventos próximos y pone cuántos (9+ si son muchos).
+    // Se llama cada vez que llegan canchas, porque el número puede cambiar.
+    function pintarEventos(el, cuantos) {
+      el.classList.toggle('con-eventos', cuantos > 0);
+      el.querySelector('.numero').textContent = cuantos > 9 ? '9+' : String(cuantos);
+      el.style.zIndex = cuantos > 0 ? '2' : '1'; // las de eventos, por encima de las demás
     }
 
     function marcarElegida(id) {
@@ -109,6 +139,9 @@ export function crearHtmlMapa(latitud: number, longitud: number, zoom: number): 
             var dentro = document.createElement('div');
             dentro.className = 'dentro';
             dentro.textContent = '🏀';
+            var numero = document.createElement('div');
+            numero.className = 'numero';
+            dentro.appendChild(numero);
             el.appendChild(dentro);
             el.addEventListener('click', function (evento) {
               evento.stopPropagation();
@@ -117,6 +150,7 @@ export function crearHtmlMapa(latitud: number, longitud: number, zoom: number): 
             });
             marcador = new maplibregl.Marker({ element: el }).setLngLat([cancha.longitud, cancha.latitud]).addTo(mapa);
           }
+          pintarEventos(marcador.getElement(), cancha.eventosProximos || 0);
           nuevos[cancha.id] = marcador;
           delete marcadores[cancha.id];
         });
