@@ -50,12 +50,22 @@ export async function peticion<T>(ruta: string, opciones: Opciones = {}): Promis
   } catch (e) {
     // __DEV__ solo es true mientras desarrollamos: el error de verdad sale en la terminal de Expo.
     if (__DEV__) console.warn(`Fallo de red en ${metodo} ${ruta}:`, e);
-    throw new ErrorApi(0, 'No se pudo conectar con el servidor. Revisa tu conexión.');
+    // En Render gratis el servidor se duerme si nadie lo usa y tarda 1-2 minutos en arrancar.
+    throw new ErrorApi(
+      0,
+      'No se pudo conectar con el servidor. Si nadie lo ha usado en un rato, puede estar arrancando: espera un minuto y vuelve a intentarlo.',
+    );
   }
 
   // Leemos el cuerpo como texto primero porque algunas respuestas vienen vacías (por ejemplo, un 401).
+  // Si no es JSON (por ejemplo, una página de error de Render mientras arranca), lo ignoramos.
   const texto = await respuesta.text();
-  const datos = texto ? JSON.parse(texto) : null;
+  let datos = null;
+  try {
+    datos = texto ? JSON.parse(texto) : null;
+  } catch {
+    datos = null;
+  }
 
   if (!respuesta.ok) {
     const mensaje =
