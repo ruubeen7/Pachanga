@@ -1,15 +1,18 @@
 import { Image } from 'expo-image';
 import * as Location from 'expo-location';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Switch,
+  TextInput,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -24,6 +27,7 @@ import {
   type Superficie,
 } from '@/api/canchas';
 import { ErrorApi } from '@/api/cliente';
+import { buscarDirecciones, MINIMO_LETRAS, type DireccionSugerencia } from '@/api/direcciones';
 import { Boton } from '@/components/boton';
 import { CampoTexto } from '@/components/campo-texto';
 import { Chip } from '@/components/chip';
@@ -39,9 +43,17 @@ const SEVILLA = { latitud: 37.3891, longitud: -5.9845 };
 const MAX_FOTOS_AL_CREAR = 5;
 const SUPERFICIES = Object.keys(NOMBRES_SUPERFICIE) as Superficie[];
 
+type Punto = { latitud: number; longitud: number };
+/** Dirección y ciudad de un punto, para rellenar el formulario. */
+type DatosDireccion = { direccion: string; ciudad: string; nombre?: string };
+/** Dónde está el usuario ahora mismo, con su dirección para enseñarla. */
+type UbicacionActual = Punto & DatosDireccion;
+
 /**
  * Los tres pasos para dar de alta una cancha:
- *  1. "ubicacion": mueves el mapa hasta que el 📍 del centro quede encima de la cancha.
+ *  1. "ubicacion": como al pedir comida a domicilio. Arriba sale tu ubicación actual y un buscador
+ *     para escribir la calle o el sitio. Si prefieres, también puedes mover el mapa hasta que
+ *     el 📍 del centro quede encima de la cancha.
  *  2. "duplicados": si ya hay canchas a menos de 50 m, preguntamos "¿es alguna de estas?".
  *  3. "datos": nombre, ciudad, características y fotos.
  * El mapa se queda siempre montado debajo; los pasos 2 y 3 se dibujan encima.
@@ -68,6 +80,14 @@ export default function NuevaCanchaScreen() {
   const [punto, setPunto] = useState(inicial); // la ubicación elegida
   const [duplicados, setDuplicados] = useState<CanchaResumen[]>([]);
   const [comprobando, setComprobando] = useState(false);
+
+  // Buscador de direcciones y ubicación actual
+  const [texto, setTexto] = useState('');
+  const [sugerencias, setSugerencias] = useState<DireccionSugerencia[]>([]);
+  const [buscando, setBuscando] = useState(false);
+  const [errorBusqueda, setErrorBusqueda] = useState<string | null>(null);
+  const [actual, setActual] = useState<UbicacionActual | null>(null);
+  const [estadoActual, setEstadoActual] = useState<'buscando' | 'listo' | 'sin-permiso' | 'error'>('buscando');
 
   // Formulario
   const [nombre, setNombre] = useState('');
@@ -110,14 +130,121 @@ export default function NuevaCanchaScreen() {
     }
   }
 
-  /** Paso 1 → 2 o 3: comprobamos si ya hay canchas a menos de 50 m. */
-  async function usarEstaUbicacion() {
-    if (!token) return;
-    const elegido = centro.current;
+  // Al abrir la pantalla buscamos dónde está el usuario y llevamos el mapa allí.
+  useEffect(() => {
+    let cancelado = false;
+
+    async function buscarDondeEstoy() {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          if (!cancelado) setEstadoActual('sin-permiso');
+          return;
+        }
+        // Si el móvil sabe dónde estábamos hace menos de 2 minutos, eso vale y es instantáneo.
+        const posicion =
+          (await Location.getLastKnownPositionAsync({ maxAge: 2 * 60 * 1000 })) ??
+          (await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }));
+        if (cancelado) return;
+
+        const aqui = { latitud: posicion.coords.latitude, longitud: posicion.coords.longitude };
+        mapa.current?.centrar(aqui.latitud, aqui.longitud, 17);
+        mapa.current?.mostrarMiUbicacion(aqui.latitud, aqui.longitud);
+
+        const datos = await direccionDe(aqui);
+        if (cancelado) return;
+        setActual({ ...aqui, direccion: datos?.direccion ?? '', ciudad: datos?.ciudad ?? '' });
+        setEstadoActual('listo');
+      } catch {
+        if (!cancelado) setEstadoActual('error');
+      }
+    }
+
+    buscarDondeEstoy();
+    // Si el usuario sale de la pantalla antes de terminar, no tocamos nada.
+    return () => {
+      cancelado = true;
+    };
+  }, []);
+
+  // Cada vez que cambia el texto del buscador, esperamos 400 ms (por si sigue escribiendo) y buscamos.
+  useEffect(() => {
+    const limpio = texto.trim();
+    if (!token || limpio.length < MINIMO_LETRAS) return;
+
+    let cancelado = false;
+    const temporizador = setTimeout(async () => {
+      setBuscando(true);
+      try {
+        // Le pasamos dónde estamos para que salgan primero los sitios cercanos.
+        const encontradas = await buscarDirecciones(token, limpio, actual ?? centro.current);
+        if (cancelado) return;
+        setSugerencias(encontradas);
+        setErrorBusqueda(null);
+      } catch (e) {
+        if (cancelado) return;
+        if (e instanceof ErrorApi && e.estado === 401) {
+          cerrarSesion();
+          return;
+        }
+        setSugerencias([]);
+        setErrorBusqueda(e instanceof ErrorApi ? e.message : 'No se ha podido buscar. Inténtalo de nuevo.');
+      } finally {
+        if (!cancelado) setBuscando(false);
+      }
+    }, 400);
+
+    // Si el texto cambia antes de los 400 ms, se cancela esta búsqueda y empieza otra.
+    return () => {
+      cancelado = true;
+      clearTimeout(temporizador);
+    };
+  }, [texto, token, actual, cerrarSesion]);
+
+  function cambiarTexto(nuevo: string) {
+    setTexto(nuevo);
+    if (nuevo.trim().length < MINIMO_LETRAS) {
+      setSugerencias([]);
+      setBuscando(false);
+      setErrorBusqueda(null);
+    }
+  }
+
+  /** Han tocado una sugerencia del buscador. */
+  function elegirSugerencia(s: DireccionSugerencia) {
+    // Si es un parque o una pista, el servidor nos propone su nombre para la cancha.
+    elegirPunto(
+      { latitud: s.latitud, longitud: s.longitud },
+      { direccion: s.direccion ?? '', ciudad: s.ciudad ?? '', nombre: s.nombreSugerido ?? undefined },
+    );
+  }
+
+  /** Botón de abajo: el punto donde está el 📍 del mapa. */
+  function usarEstaUbicacion() {
+    elegirPunto(centro.current);
+  }
+
+  /**
+   * Paso 1 → 2 o 3: guardamos el punto y comprobamos si ya hay canchas a menos de 50 m.
+   * Si ya sabemos la dirección (viene del buscador), la usamos; si no, la buscamos por las coordenadas.
+   */
+  async function elegirPunto(elegido: Punto, datos?: DatosDireccion) {
+    if (!token || comprobando) return;
+    Keyboard.dismiss();
     setPunto(elegido);
+    // Movemos el mapa al punto, por si luego vuelve con "Cambiar ubicación" para ajustarlo.
+    mapa.current?.centrar(elegido.latitud, elegido.longitud, 18);
     setComprobando(true);
     setError(null);
-    rellenarDireccion(elegido.latitud, elegido.longitud); // en paralelo; no esperamos por ella
+
+    if (datos) {
+      setDireccion(datos.direccion);
+      setCiudad(datos.ciudad);
+      if (datos.nombre && !nombre) setNombre(datos.nombre);
+    } else {
+      rellenarDireccion(elegido.latitud, elegido.longitud); // en paralelo; no esperamos por ella
+    }
+
     try {
       const cerca = await posiblesDuplicados(token, elegido.latitud, elegido.longitud);
       setDuplicados(cerca);
@@ -129,19 +256,12 @@ export default function NuevaCanchaScreen() {
     }
   }
 
-  /**
-   * Rellena ciudad y dirección a partir de las coordenadas ("geocodificación inversa").
-   * Lo hace el propio sistema del móvil (Apple o Google), gratis. Si falla, el usuario las escribe.
-   */
+  /** Rellena ciudad y dirección del formulario a partir de las coordenadas (ver direccionDe). */
   async function rellenarDireccion(latitud: number, longitud: number) {
-    try {
-      const [lugar] = await Location.reverseGeocodeAsync({ latitude: latitud, longitude: longitud });
-      if (!lugar) return;
-      setCiudad(lugar.city ?? lugar.subregion ?? '');
-      setDireccion([lugar.street, lugar.streetNumber].filter(Boolean).join(', '));
-    } catch {
-      // Sin dirección automática: no pasa nada.
-    }
+    const datos = await direccionDe({ latitud, longitud });
+    if (!datos) return; // sin dirección automática: el usuario la escribe
+    setCiudad(datos.ciudad);
+    setDireccion(datos.direccion);
   }
 
   async function anadirFotos() {
@@ -212,19 +332,86 @@ export default function NuevaCanchaScreen() {
         </View>
       </View>
 
-      <View style={[styles.instrucciones, { backgroundColor: tema.background, borderColor: tema.borde }]}>
-        <ThemedText type="small">
-          Mueve el mapa hasta que el 📍 quede encima de la cancha. Acerca bien el mapa para ser preciso.
-        </ThemedText>
-      </View>
-
+      {/* Abajo va primero para que el buscador de arriba (con sus sugerencias) quede por encima. */}
       <View style={[styles.abajo, { bottom: margenes.bottom + Spacing.three }]}>
         {error && paso === 'ubicacion' ? (
           <ThemedText style={[styles.errorFlotante, { color: tema.error, backgroundColor: tema.background }]}>
             {error}
           </ThemedText>
         ) : null}
-        <Boton texto="Usar esta ubicación" onPress={usarEstaUbicacion} cargando={comprobando} />
+        <Boton texto="Usar el punto del mapa" onPress={usarEstaUbicacion} cargando={comprobando} />
+      </View>
+
+      {/* Buscador, como al pedir comida a domicilio */}
+      <View style={[styles.buscador, { backgroundColor: tema.background, borderColor: tema.borde }]}>
+        <View style={[styles.cajaBusqueda, { backgroundColor: tema.backgroundElement, borderColor: tema.borde }]}>
+          <ThemedText>🔍</ThemedText>
+          <TextInput
+            value={texto}
+            onChangeText={cambiarTexto}
+            placeholder="Escribe la calle o el sitio de la cancha"
+            placeholderTextColor={tema.textSecondary}
+            style={[styles.entrada, { color: tema.text }]}
+            autoCorrect={false}
+            returnKeyType="search"
+          />
+          {texto ? (
+            <Pressable onPress={() => cambiarTexto('')} hitSlop={8} accessibilityLabel="Borrar búsqueda">
+              <ThemedText themeColor="textSecondary">✕</ThemedText>
+            </Pressable>
+          ) : null}
+        </View>
+
+        {texto.trim().length < MINIMO_LETRAS ? (
+          // Sin texto: ofrecemos la ubicación actual
+          <Pressable
+            onPress={() => actual && elegirPunto(actual, actual)}
+            disabled={!actual || comprobando}
+            style={({ pressed }) => [styles.opcion, pressed && styles.pulsado]}>
+            <ThemedText style={styles.negrita}>📍 Usar mi ubicación actual</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              {estadoActual === 'buscando'
+                ? 'Buscando dónde estás…'
+                : estadoActual === 'sin-permiso'
+                  ? 'No tenemos permiso para ver tu ubicación. Busca la calle o mueve el mapa.'
+                  : estadoActual === 'error'
+                    ? 'No hemos podido saber dónde estás. Busca la calle o mueve el mapa.'
+                    : [actual?.direccion, actual?.ciudad].filter(Boolean).join(', ') || 'Estás aquí'}
+            </ThemedText>
+          </Pressable>
+        ) : (
+          <ScrollView style={styles.listaSugerencias} keyboardShouldPersistTaps="handled">
+            {buscando && sugerencias.length === 0 ? <ActivityIndicator style={styles.opcion} /> : null}
+            {sugerencias.map((s) => (
+              <Pressable
+                key={`${s.latitud},${s.longitud},${s.titulo}`}
+                onPress={() => elegirSugerencia(s)}
+                disabled={comprobando}
+                style={({ pressed }) => [styles.opcion, { borderTopColor: tema.borde }, styles.separador, pressed && styles.pulsado]}>
+                <ThemedText style={styles.negrita}>{s.titulo}</ThemedText>
+                {s.detalle ? (
+                  <ThemedText type="small" themeColor="textSecondary">
+                    {s.detalle}
+                  </ThemedText>
+                ) : null}
+              </Pressable>
+            ))}
+            {!buscando && errorBusqueda ? (
+              <ThemedText type="small" style={[styles.opcion, { color: tema.error }]}>
+                {errorBusqueda}
+              </ThemedText>
+            ) : null}
+            {!buscando && !errorBusqueda && sugerencias.length === 0 ? (
+              <ThemedText type="small" themeColor="textSecondary" style={styles.opcion}>
+                No encontramos nada con ese nombre. Prueba con la calle, o mueve el mapa y pon el 📍 encima.
+              </ThemedText>
+            ) : null}
+          </ScrollView>
+        )}
+
+        <ThemedText type="small" themeColor="textSecondary">
+          También puedes mover el mapa hasta que el 📍 quede encima de la cancha.
+        </ThemedText>
       </View>
 
       {paso === 'duplicados' && (
@@ -385,6 +572,23 @@ export default function NuevaCanchaScreen() {
   );
 }
 
+/**
+ * Dirección y ciudad de unas coordenadas ("geocodificación inversa").
+ * Lo hace el propio sistema del móvil (Apple o Google), gratis. Si falla, devuelve null.
+ */
+async function direccionDe(punto: Punto): Promise<DatosDireccion | null> {
+  try {
+    const [lugar] = await Location.reverseGeocodeAsync({ latitude: punto.latitud, longitude: punto.longitud });
+    if (!lugar) return null;
+    return {
+      ciudad: lugar.city ?? lugar.subregion ?? '',
+      direccion: [lugar.street, lugar.streetNumber].filter(Boolean).join(', '),
+    };
+  } catch {
+    return null;
+  }
+}
+
 function Interruptor({
   texto,
   valor,
@@ -417,7 +621,7 @@ const styles = StyleSheet.create({
     lineHeight: 48,
     marginBottom: 44, // sube el emoji para que su punta (no su centro) marque el punto
   },
-  instrucciones: {
+  buscador: {
     position: 'absolute',
     top: Spacing.three,
     left: Spacing.three,
@@ -425,6 +629,30 @@ const styles = StyleSheet.create({
     padding: Spacing.three,
     borderRadius: Spacing.three,
     borderWidth: 1,
+    gap: Spacing.two,
+  },
+  cajaBusqueda: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    borderWidth: 1,
+    borderRadius: Spacing.two,
+    paddingHorizontal: Spacing.three,
+  },
+  entrada: {
+    flex: 1,
+    paddingVertical: Spacing.two + Spacing.one,
+    fontSize: 16,
+  },
+  listaSugerencias: {
+    maxHeight: 280,
+  },
+  opcion: {
+    paddingVertical: Spacing.two,
+    gap: Spacing.half,
+  },
+  separador: {
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   abajo: {
     position: 'absolute',
